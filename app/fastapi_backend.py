@@ -1,0 +1,516 @@
+# ========================
+# Standard Library Imports
+# ========================
+import os
+import asyncio
+
+# ========================
+# Third-Party Imports
+# ========================
+import numpy as np
+import torch
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
+
+# ========================
+# Local Module Imports
+# ========================
+from nca.utils.image_utils import to_rgb, to_rgba, to_grayscale
+from app.connection_manager import ConnectionManager
+from app.state_handler import StateHandler
+from app.ca_handler import CaHandler
+from app.tools.brushes import delete_brush, paint_brush
+
+# ========================
+# Global Constants & Configurations
+# ========================
+TRAINLOG_ROOT = "./train_log"
+CANVAS_SIZE = 512
+
+# ========================
+# FastAPI App Initialization
+# ========================
+app = FastAPI()
+templates = Jinja2Templates(directory="app/templates")
+
+# Mount static files (e.g., scripts)
+app.mount("/static/js", StaticFiles(directory="app/scripts"), name="static")
+
+# Configure CORS middleware (adjust allow_origins as needed)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ========================
+# Asyncio Locks & Events
+# ========================
+image_lock = asyncio.Lock()
+x_lock = asyncio.Lock()
+random_changes_event = asyncio.Event()
+
+# ========================
+# Initialize CA and State Handlers
+# ========================
+log_path = "/home/mspitzna/nca-torch/train_log/resnet_conv5x5_20251010_100155"  # Adjust as needed
+ca_handler = CaHandler()
+config = ca_handler.load_model(log_path)
+IMG_SIZE, COLOR_DIM, COND_DIM, x_tensor, current_input_image, cond = ca_handler.get_initial_data()
+
+state_handler = StateHandler(config, IMG_SIZE, COLOR_DIM, COND_DIM)
+state_handler.set_state(current_input_image[:, :, :3], x_tensor, cond)
+
+# Manager for handling WebSocket connections
+manager = ConnectionManager()
+
+
+# ========================
+# Utility Functions
+# ========================
+def convert_to_img(x_tensor):
+    """
+    Convert the CA tensor state to an RGB image based on the dataset configuration.
+    """
+    if state_handler.get_config().DATASET.NAME == "mnist":
+        dataset = ca_handler.get_dataset()
+        img = dataset.generate_colored_image(
+            to_grayscale(state_handler.get_img_tensor()), x_tensor[0, -10:]
+        )
+        img = to_rgb(img[:, :3]).numpy().clip(0, 1).squeeze(0).transpose(1, 2, 0)
+        img = (img * 255).astype(np.uint8)
+    elif state_handler.get_config().DATASET.NAME == "moving_mnist":
+        img = (
+            (
+                to_rgb(x_tensor[:, :1].clone().cpu().detach())
+                .numpy()
+                .clip(0, 1)
+                .squeeze(0)
+                .transpose(1, 2, 0)
+            )
+            * 255
+        ).astype(np.uint8)
+    else:
+        img = (
+            (
+                to_rgb(x_tensor[:, :state_handler.get_color_dim()].clone().cpu().detach())
+                .numpy()
+                .clip(0, 1)
+                .squeeze(0)
+                .transpose(1, 2, 0)
+            )
+            * 255
+        ).astype(np.uint8)
+    return img
+
+
+async def reset_seed_and_condition():
+    """
+    Reset the CA seed and condition, update the state, and broadcast the new image.
+    """
+    _, _, _, x_tensor, current_input_image, cond = ca_handler.get_initial_data()
+    with state_handler.get_lock():
+        state_handler.set_state(current_input_image[:, :, :3], x_tensor, cond)
+        state_handler.set_seed_tensor(x_tensor.clone().detach())
+    await manager.broadcast_image(state_handler.get_img_canvas())
+
+
+async def apply_ca_changes():
+    """
+    Continuously apply CA changes at intervals defined by the current speed.
+    Implements adaptive frame skipping for better performance with large images.
+    """
+    frame_counter = 0
+    import time
+    last_log_time = time.time()
+    frame_times = []
+
+    while random_changes_event.is_set():
+        loop_start = time.time()
+        await asyncio.sleep(state_handler.get_speed())
+
+        with state_handler.get_lock():
+            x_tensor = state_handler.get_img_tensor()
+
+            # Adaptive broadcast interval based on image size
+            img_size = x_tensor.shape[-1] * x_tensor.shape[-2]
+            if img_size > 512 * 512:
+                broadcast_interval = 10  # Skip more frames for very large images
+            elif img_size > 256 * 256:
+                broadcast_interval = 4  # Moderate skipping for medium images
+            else:
+                broadcast_interval = 1
+
+            x_tensor_gpu, x_latent_gpu = ca_handler.forward(
+                x_tensor, state_handler.get_condition_tensor()
+            )
+            # Move back to CPU for display only when broadcasting
+            x_latent_cpu = x_latent_gpu.cpu()
+            state_handler.set_img_tensor(x_latent_cpu)
+
+        # Only broadcast every Nth frame to reduce network overhead
+        frame_counter += 1
+        if frame_counter >= broadcast_interval:
+            # Only convert to image when we're actually broadcasting
+            with state_handler.get_lock():
+                x_tensor_cpu = state_handler.get_img_tensor()
+                img = convert_to_img(x_tensor_cpu)
+                state_handler.set_img_canvas(img)
+            await manager.broadcast_image(state_handler.get_img_canvas())
+            frame_counter = 0
+
+        # Performance monitoring
+        loop_time = time.time() - loop_start
+        frame_times.append(loop_time)
+        if time.time() - last_log_time > 5.0:  # Log every 5 seconds
+            avg_time = sum(frame_times) / len(frame_times)
+            actual_fps = 1.0 / avg_time if avg_time > 0 else 0
+            print(f"Performance: {actual_fps:.1f} FPS (avg frame time: {avg_time*1000:.1f}ms, image size: {x_tensor.shape[-2]}x{x_tensor.shape[-1]})")
+            frame_times = []
+            last_log_time = time.time()
+
+
+def visualize_feature_space_max_activation(feature_tensor):
+    """
+    Visualize a 16x64x64 feature space as a 3x64x64 RGB image using max-activation.
+    
+    Args:
+        feature_tensor (torch.Tensor): Feature tensor of shape (16, 64, 64)
+        
+    Returns:
+        torch.Tensor: RGB image of shape (3, 64, 64)
+    """
+    max_activations, indices = torch.max(torch.abs(feature_tensor), dim=0)  # (64, 64)
+    # Map feature index to RGB channels using modulo arithmetic
+    r = (indices % 3 == 0).float() * max_activations
+    g = (indices % 3 == 1).float() * max_activations
+    b = (indices % 3 == 2).float() * max_activations
+    output = torch.stack([r, g, b], dim=0)
+    output = (output - output.min()) / (output.max() - output.min())
+    return output
+
+
+def get_trainlog_folders():
+    folders = []
+    for root, dirs, files in os.walk(TRAINLOG_ROOT):
+        if "ca_final.pt" in files:
+            # Return relative path starting with "train_log"
+            rel_path = os.path.join(os.path.relpath(root, TRAINLOG_ROOT))
+            folders.append(rel_path)
+    return folders
+
+
+
+def resize_canvas_centered(img_canvas: np.ndarray, new_height: int, new_width: int) -> np.ndarray:
+    """
+    Resize a numpy image canvas to a new size by centered cropping or padding.
+    """
+    old_height, old_width = img_canvas.shape[:2]
+    new_canvas = np.zeros((new_height, new_width, img_canvas.shape[2]), dtype=img_canvas.dtype)
+
+    # Determine vertical cropping/padding
+    if new_height >= old_height:
+        dest_y = (new_height - old_height) // 2
+        src_y = 0
+        copy_height = old_height
+    else:
+        dest_y = 0
+        src_y = (old_height - new_height) // 2
+        copy_height = new_height
+
+    # Determine horizontal cropping/padding
+    if new_width >= old_width:
+        dest_x = (new_width - old_width) // 2
+        src_x = 0
+        copy_width = old_width
+    else:
+        dest_x = 0
+        src_x = (old_width - new_width) // 2
+        copy_width = new_width
+
+    new_canvas[dest_y:dest_y+copy_height, dest_x:dest_x+copy_width] = \
+        img_canvas[src_y:src_y+copy_height, src_x:src_x+copy_width]
+    return new_canvas
+
+
+def resize_tensor_centered(img_tensor: torch.Tensor, new_height: int, new_width: int) -> torch.Tensor:
+    """
+    Resize a torch image tensor to a new size by centered cropping or padding.
+    """
+    batch, channels, old_height, old_width = img_tensor.shape
+    new_tensor = torch.zeros((batch, channels, new_height, new_width), dtype=img_tensor.dtype, device=img_tensor.device)
+    
+    # Determine vertical cropping/padding
+    if new_height >= old_height:
+        dest_y = (new_height - old_height) // 2
+        src_y = 0
+        copy_height = old_height
+    else:
+        dest_y = 0
+        src_y = (old_height - new_height) // 2
+        copy_height = new_height
+
+    # Determine horizontal cropping/padding
+    if new_width >= old_width:
+        dest_x = (new_width - old_width) // 2
+        src_x = 0
+        copy_width = old_width
+    else:
+        dest_x = 0
+        src_x = (old_width - new_width) // 2
+        copy_width = new_width
+
+    new_tensor[:, :, dest_y:dest_y+copy_height, dest_x:dest_x+copy_width] = \
+        img_tensor[:, :, src_y:src_y+copy_height, src_x:src_x+copy_width]
+    return new_tensor
+
+
+# ========================
+# FastAPI Routes
+# ========================
+
+# --- Main Page & WebSocket ---
+
+@app.get("/", response_class=HTMLResponse)
+async def get(request: Request):
+    """
+    Render the base template with available trainlog folders.
+    """
+    folders = get_trainlog_folders()
+    return templates.TemplateResponse("base.html", {"request": request, "folders": folders})
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    """
+    Return an empty favicon response.
+    """
+    return Response(content="", media_type="image/x-icon")
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """
+    Handle WebSocket connections for live image updates.
+    """
+    await manager.connect(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+
+
+# --- Model & Image Manipulation Routes ---
+
+@app.post("/erase")
+async def erase(action: dict):
+    """
+    Erase part of the image using a brush tool.
+    """
+    with state_handler.get_lock():
+        img_canvas = state_handler.get_img_canvas()
+        img_tensor = state_handler.get_img_tensor().squeeze(0)
+        img_canvas, img_tensor = delete_brush(
+            img_canvas, img_tensor, action, img_canvas.shape[0]
+        )
+        state_handler.set_img_canvas(img_canvas)
+        state_handler.set_img_tensor(img_tensor.unsqueeze(0))
+    return JSONResponse(content={"status": "Erased"})
+
+
+@app.post("/set_seed_dot")
+async def set_seed_dot(action: dict):
+    """
+    Set a seed dot on the image based on provided coordinates.
+    """
+    with state_handler.get_lock():
+        img_canvas = state_handler.get_img_canvas()
+        img_tensor = state_handler.get_img_tensor().squeeze(0)
+        x = int(action["x"])
+        y = int(action["y"])
+        # Rescale coordinates to match the canvas size
+        x = int(x * img_canvas.shape[0] / CANVAS_SIZE)
+        y = int(y * img_canvas.shape[0] / CANVAS_SIZE)
+        img_tensor[:, y, x] = 1.0
+        state_handler.set_img_tensor(img_tensor.unsqueeze(0))
+    return JSONResponse(content={"status": "Seed dot set"})
+
+
+@app.post("/reset_image")
+async def reset_image():
+    """
+    Reset the image to its initial state.
+    """
+    await reset_seed_and_condition()
+    await manager.broadcast_image(state_handler.get_img_canvas())
+    return JSONResponse(content={"status": "Image cleared"})
+
+
+@app.post("/clear_image")
+async def clear_image():
+    """
+    Clear the image canvas.
+    """
+    with state_handler.get_lock():
+        img_canvas = state_handler.get_img_canvas() * 0
+        state_handler.set_img_canvas(img_canvas)
+        img_tensor = state_handler.get_img_tensor()
+        img_tensor[0:4] = img_tensor[0:4] * 0
+        state_handler.set_img_tensor(img_tensor)
+    await manager.broadcast_image(state_handler.get_img_canvas())
+    return JSONResponse(content={"status": "Image cleared"})
+
+
+@app.post("/stop_changes")
+async def stop_changes():
+    """
+    Stop applying random CA changes.
+    """
+    random_changes_event.clear()
+    return JSONResponse(content={"status": "Random changes stopped"})
+
+
+@app.post("/start_changes")
+async def start_changes():
+    """
+    Start applying random CA changes.
+    """
+    random_changes_event.set()
+    asyncio.create_task(apply_ca_changes())
+    return JSONResponse(content={"status": "Random changes started"})
+
+
+@app.post("/load_model")
+async def load_model(data: dict):
+    """
+    Load a new model based on the provided log folder path.
+    """
+    global state_handler
+    config = ca_handler.load_model("train_log/" + data["log_path"])
+    IMG_SIZE, COLOR_DIM, COND_DIM, x_tensor, current_input_image, cond = ca_handler.get_initial_data()
+    state_handler = StateHandler(config, IMG_SIZE, COLOR_DIM, COND_DIM)
+    state_handler.set_state(current_input_image[:, :, :3], x_tensor, cond)
+    state_handler.set_seed_tensor(x_tensor.clone().detach())
+    await reset_seed_and_condition()
+    return JSONResponse(
+        content={
+            "status": "Model loaded successfully",
+            "redirect_url": f"/{ca_handler.get_dataset_name()}",
+        }
+    )
+
+
+@app.post("/adjust_image_size")
+async def adjust_image_size(data: dict):
+    """
+    Adjust the image canvas and tensor size.
+    """
+    height, width = int(data["height"]), int(data["width"])
+    print(f"Adjusting image size to {height}x{width}")
+    with state_handler.get_lock():
+        img_canvas = state_handler.get_img_canvas()
+        img_tensor = state_handler.get_img_tensor()
+        img_canvas = resize_canvas_centered(img_canvas, height, width)
+        img_tensor = resize_tensor_centered(img_tensor, height, width)
+        state_handler.set_img_tensor(img_tensor)
+        state_handler.set_img_canvas(img_canvas)
+    await manager.broadcast_image(state_handler.get_img_canvas())
+    return JSONResponse(content={"status": "Image size adjusted"})
+
+
+# --- MNIST Dataset Routes ---
+
+@app.post("/paint")
+async def paint(action: dict):
+    """
+    Paint on the image using a brush tool (for MNIST dataset).
+    """
+    with state_handler.get_lock():
+        img_canvas = state_handler.get_img_canvas()
+        img_tensor = state_handler.get_img_tensor().squeeze(0)
+        img_canvas, img_tensor = paint_brush(
+            img_canvas, img_tensor, action, img_canvas.shape[0]
+        )
+        state_handler.set_img_canvas(img_canvas)
+        state_handler.set_img_tensor(img_tensor.unsqueeze(0))
+    return JSONResponse(content={"status": "Painted"})
+
+
+# --- Emoji Dataset Routes ---
+
+@app.post("/roll_condition")
+async def roll_condition():
+    """
+    Roll the condition for the emoji dataset.
+    """
+    _, _, _, _, _, cond = ca_handler.get_initial_data()
+    with state_handler.get_lock():
+        state_handler.set_condition_tensor(cond)
+    await manager.broadcast_image(state_handler.get_img_canvas())
+    return JSONResponse(content={"status": "Condition rolled"})
+
+
+# --- Invertible Dataset Routes ---
+@app.post("/invert_condition")
+async def invert_condition():
+    # return either [0, 1] or [1, 0] based on the current condition
+    with state_handler.get_lock():
+        tensor = state_handler.get_condition_tensor()
+        if tensor.shape[1] == 2:  # Assuming condition tensor has shape [
+            # Invert the condition tensor
+            tensor = 1 - tensor
+        else:
+            # If the condition tensor is not binary, just return it as is
+            tensor = tensor.clone()
+        state_handler.set_condition_tensor(tensor)
+    await manager.broadcast_image(state_handler.get_img_canvas())
+    return JSONResponse(content={"status": "Condition inverted"})
+
+
+@app.post("/change_condition")
+async def change_condition(data: dict):
+    """
+    Change the condition for the emoji dataset.
+    """
+    print(f"Changing condition to {data}")
+    condition_tensor = ca_handler.get_condition_tensor(int(data["index"]))
+    with state_handler.get_lock():
+        state_handler.set_condition_tensor(condition_tensor)
+    await manager.broadcast_image(state_handler.get_img_canvas())
+    return JSONResponse(content={"status": "Condition changed"})
+
+
+# --- Dynamic Dataset Page ---
+@app.get("/{dataset_type}")
+async def dataset_page(request: Request, dataset_type: str):
+    """
+    Render the page for a specific dataset type.
+    """
+
+    train_folders = get_trainlog_folders()
+
+    template_name = f"{dataset_type}.html"
+    context = {
+        "request": request,
+        "title": f"Dataset Page for {dataset_type}",
+        "data": ca_handler.get_ui_config(),
+        "folders": train_folders,
+    }
+    return templates.TemplateResponse(template_name, context)
+
+
+@app.post("/set_speed")
+async def set_speed(data: dict):
+    """
+    Set the speed (updates per second) for CA changes.
+    """
+    speed = float(data["speed"])
+    with state_handler.get_lock():
+        state_handler.set_speed(speed)
+    return JSONResponse(content={"status": "Speed set"})

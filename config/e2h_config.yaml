@@ -1,0 +1,91 @@
+PROJECT_NAME: "e2h_latent"                # Name of the project
+TRAIN_NAME: "e2h_latent"                  # Name of the training run
+SEED: 42                                  # Random seed
+DEVICE: "cuda"  
+WANDB: true                               # Flag to enable logging to Weights & Biases
+
+MODEL:
+  MODEL_NAME: "ResNetCA"
+  HIDDEN_CHANNELS: [256]
+  CHANNEL_N: 4
+  USE_POSITIONAL_EMBEDDINGS: False
+  LIVING_MASK: true
+  LIVING_MASK_INDEX: 3
+  FINAL_ACTIVATION: false
+  PERCEPTIONS:
+    - MODE: conv
+      KERNEL_SIZE: 5
+
+TRAINING:
+  BATCH_SIZE: 32
+  STEPS: 100000
+  LOSS_FN: "l1"
+  LEARNING_RATE: 0.0005
+  LR_SCHEDULE_MODE: "cosine"
+  OVERFLOW_LOSS: true
+  GAMMA: 0.1
+  LOG_INTERVAL: 500
+  SAVE_INTERVAL: 50000
+  ITER_N_MIN: 20
+  ITER_N_MAX: 26
+  INTERMEDIATE_LOGGING_STEPS: [5, 10, 15]
+  GRADIENT_CLIPPING_NORM: 1.0
+  GRADIENT_CHECKPOINTING: false
+
+
+DATASET:
+  NAME: "e2h"                       # Name of the dataset [emoji, e2h, mnist]
+  DATAROOT: "./datasets/edges2handbags"
+  TARGET_SIZE: 256                    # Size of the target
+
+ADVERSARIAL:
+  ENABLED: true                        # Set to False to disable GAN training
+  D_IN_CHANNELS: 4
+  D_FEATURES: [32, 64, 128, 256]      # Features for the discriminator
+  D_LEARNING_RATE: 0.0005                   # Learning rate for the discriminator
+  D_START_TRAINING: 1                    # Steps at which the discriminator starts training
+  D_WARMUP_STEPS: 2000
+  D_GAMMA: 0.1                              # Learning rate decay factor for the discriminator
+  D_N_CRITIC: 1
+  D_GP_WEIGHT: 10.0
+  RECON_WEIGHT: 0.1                           # Weight for reconstruction loss in the generator's total loss
+  ADV_WEIGHT: 1.0                              # Weight for adversarial loss in the generator's total loss
+  D_DOWNSCALE_FACTOR: 1
+  SEED_TO_CRITIC: False
+
+
+PATTERN_POOL:
+  ENABLED: true
+  POOL_SIZE: 1024
+  POOL_DELAY: 1
+  POOL_START_RATIO: 0.5
+  POOL_END_RATIO: 0.5
+  POOL_DMG_RATIO: 0.0
+  POOL_DMG_DELAY: 1
+  POOL_MUTATION_RATIO: 0.0
+
+LATENT_TRAINING:
+  ENABLED: True
+  LATENT_AE_STEPS: 100000
+  LATENT_AE_LR: 0.0005                  
+  LATENT_AE_WARMUP_STEPS: 2000          
+  LATENT_AE_IN_CHANNEL: 4
+  LATENT_AE_OUT_CHANNEL: 4
+  LATENT_AE_LOG_INTERVAL: 500
+  LATENT_AE_SAVE_INTERVAL: 50000
+  ENCODER_TYPE: "VAE"
+  VAE_BATCH_SIZE: 16
+  VAE_KL_BETA: 0.5                   
+  VAE_BASE_CHANNELS: 64
+  VAE_NUM_DOWNSAMPLES: 3
+  VAE_NORM_GROUPS: 32
+  VAE_KL_WARMUP_STEPS: 30000             
+  APPLY_DAMAGE: False
+  VAE_VGG_LOSS_WEIGHT: 1.0
+  VAE_L1_LOSS_WEIGHT: 1.0
+  VAE_RECON_LOSS_TYPE: "mse"
+
+
+  
+
+

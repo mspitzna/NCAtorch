@@ -1,0 +1,59 @@
+PROJECT_NAME: "emoji"                 # Name of the project
+TRAIN_NAME: "emoji_residual_3x3"              # Name of the training run
+SEED: 42                                  # Random seed
+DEVICE: "cuda"                             # Device to use for training
+WANDB: true                               # Flag to enable logging to Weights & Biases
+
+MODEL:
+  NAME: "ConvCA"
+  HIDDEN_CHANNELS: [80]
+  CHANNEL_N: 16
+  USE_POSITIONAL_EMBEDDINGS: False
+  LIVING_MASK: true
+  NORMALIZE_OUTPUT: false
+  FINAL_ACTIVATION: false
+  PERCEPTIONS:
+    - MODE: "conv"
+      KERNEL_SIZE: 3
+    - MODE: "residual_conv"
+      KERNEL_SIZE: 3
+
+
+TRAINING:
+  BATCH_SIZE: 18
+  STEPS: 100000
+  LEARNING_RATE: 0.0005
+  LR_SCHEDULE_MODE: "cosine"
+  LOSS_FN: "mse"
+  WARMUP_STEPS: 10000
+  OVERFLOW_LOSS: true
+  GAMMA: 0.1
+  LOG_INTERVAL: 500
+  SAVE_INTERVAL: 25000
+  ITER_N_MIN: 48
+  ITER_N_MAX: 64
+  INTERMEDIATE_LOGGING_STEPS: [5, 20, 40]
+  GRADIENT_CLIPPING_NORM: 1.0
+  GRADIENT_CHECKPOINTING: false
+  GRADIENT_CHECKPOINT_SEGMENTS: 10
+  GRADIENT_ACCUMULATION_STEPS: 1
+
+DATASET:
+  NAME: "emoji"                            # Name of the dataset [emoji, e2h, mnist]
+  TARGET_SIZE: 48
+  EMOJIS:
+    - "😭"
+    - "🔥"
+    - "🎉"
+    - "🍀"
+    - "🍎"
+
+PATTERN_POOL:
+  ENABLED: true
+  POOL_SIZE: 1024
+  POOL_DELAY: 1
+  POOL_START_RATIO: 0.5
+  POOL_END_RATIO: 0.5
+  POOL_DMG_RATIO: 0.5
+  POOL_DMG_DELAY: 1
+  POOL_MUTATION_RATIO: 0.5

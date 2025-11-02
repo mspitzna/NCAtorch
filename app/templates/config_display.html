@@ -1,0 +1,129 @@
+{% macro render_config(data) %}
+<div class="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-6 shadow-sm">
+  <h2 class="text-2xl font-bold mb-6 text-slate-800 flex items-center gap-2">
+    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+    </svg>
+    Configuration
+  </h2>
+
+  <div class="space-y-2">
+    {% for key, value in data.items() %}
+      {% if value is mapping %}
+        <!-- Nested structure - make it collapsible -->
+        <div class="w-full config-item">
+          <button
+            class="config-button flex justify-between items-center w-full px-5 py-3 text-left bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
+            data-target="panel-{{ loop.index0 }}"
+          >
+            <span class="font-semibold text-base">{{ key }}</span>
+            <svg
+              class="w-5 h-5 transform transition-transform duration-200 chevron-icon"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+            </svg>
+          </button>
+
+          <div
+            id="panel-{{ loop.index0 }}"
+            class="config-panel hidden overflow-hidden"
+          >
+            <div class="p-4 bg-white border-l-4 border-blue-500 rounded-b-xl shadow-sm space-y-2 mt-1">
+              {% for subkey, subvalue in value.items() %}
+                <div class="flex justify-between items-center py-2 px-3 rounded-lg hover:bg-slate-50 transition-colors duration-150">
+                  <span class="font-medium text-slate-600 text-sm">{{ subkey }}</span>
+                  <span class="text-slate-900 font-mono text-sm bg-slate-100 px-3 py-1 rounded-md">{{ subvalue }}</span>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      {% elif value is iterable and value is not string %}
+        <!-- List - show as expandable -->
+        <div class="w-full config-item">
+          <button
+            class="config-button flex justify-between items-center w-full px-5 py-3 text-left bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-xl transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
+            data-target="panel-{{ loop.index0 }}"
+          >
+            <span class="font-semibold text-base">{{ key }}</span>
+            <div class="flex items-center gap-2">
+              <span class="text-xs bg-emerald-700 bg-opacity-70 px-3 py-1 rounded-full font-medium">{{ value|length }} items</span>
+              <svg
+                class="w-5 h-5 transform transition-transform duration-200 chevron-icon"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+              </svg>
+            </div>
+          </button>
+
+          <div
+            id="panel-{{ loop.index0 }}"
+            class="config-panel hidden overflow-hidden"
+          >
+            <div class="p-4 bg-white border-l-4 border-emerald-500 rounded-b-xl shadow-sm mt-1">
+              <div class="grid grid-cols-2 gap-2">
+                {% for item in value %}
+                  <div class="px-3 py-2 bg-emerald-50 text-emerald-900 rounded-lg text-sm font-medium hover:bg-emerald-100 transition-colors">
+                    {{ item }}
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
+      {% else %}
+        <!-- Simple value - show directly -->
+        <div class="flex justify-between items-center px-5 py-3 bg-white rounded-xl border border-slate-200 hover:border-slate-300 transition-all duration-150 shadow-sm hover:shadow-md">
+          <span class="font-medium text-slate-600">{{ key }}</span>
+          <span class="text-slate-900 font-mono text-sm bg-slate-50 px-4 py-1.5 rounded-lg border border-slate-200">{{ value }}</span>
+        </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+</div>
+
+<script>
+  // Enhanced toggle functionality with smooth animations
+  document.querySelectorAll("button[data-target]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const targetId = button.getAttribute("data-target");
+      const panel = document.getElementById(targetId);
+      const icon = button.querySelector(".chevron-icon");
+
+      if (panel.classList.contains("hidden")) {
+        // Show panel with animation
+        panel.classList.remove("hidden");
+        panel.style.maxHeight = "0px";
+        panel.style.opacity = "0";
+
+        requestAnimationFrame(() => {
+          panel.style.transition = "all 0.3s ease-out";
+          panel.style.maxHeight = panel.scrollHeight + "px";
+          panel.style.opacity = "1";
+        });
+
+        // Rotate chevron down
+        if (icon) icon.style.transform = "rotate(180deg)";
+      } else {
+        // Hide panel with animation
+        panel.style.maxHeight = "0px";
+        panel.style.opacity = "0";
+
+        setTimeout(() => {
+          panel.classList.add("hidden");
+        }, 300);
+
+        // Rotate chevron up
+        if (icon) icon.style.transform = "rotate(0deg)";
+      }
+    });
+  });
+</script>
+{% endmacro %}

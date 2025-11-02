@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Interactive Image Manipulation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      canvas {
+        border: 2px solid #4a5568;
+        cursor: crosshair;
+        image-rendering: pixelated;
+      }
+    </style>
+  </head>
+  <body class="bg-gray-100 font-sans leading-normal tracking-normal">
+    <div class="max-w-4xl mx-auto p-6">
+      <h1 class="text-3xl font-bold text-center text-gray-800 mb-8">
+        Interactive Image Manipulation
+      </h1>
+
+      <canvas
+        id="canvas"
+        width="512"
+        height="512"
+        class="mx-auto mb-6 shadow-lg"
+      ></canvas>
+
+      <div class="flex justify-center gap-4 mb-4">
+        <button
+          id="startButton"
+          class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+        >
+          Start Random Changes
+        </button>
+        <button
+          id="stopButton"
+          class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
+        >
+          Stop Random Changes
+        </button>
+        <button
+          id="clearButton"
+          class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded"
+        >
+          Clear Image
+        </button>
+      </div>
+
+      <form
+        id="loadModelForm"
+        class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4"
+      >
+        <div class="mb-4">
+          <label
+            for="logPath"
+            class="block text-gray-700 text-sm font-bold mb-2"
+            >Enter Log Path for Model</label
+          >
+          <input
+            type="text"
+            id="logPath"
+            placeholder="Enter log path"
+            required
+            class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+          />
+        </div>
+        <div class="flex items-center justify-between">
+          <button
+            type="submit"
+            class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
+          >
+            Load Model
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <script
+      src="https://cdn.socket.io/4.3.2/socket.io.min.js"
+      integrity="sha384-wfD+Zp2cbJ7nMs3a0sBX9cd9I6k8yb5JgOJO55UyLyxBbyPV2uKtg9KxHm1L4Ubs"
+      crossorigin="anonymous"
+    ></script>
+    <script>
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+      ctx.imageSmoothingEnabled = false;
+
+      ctx.fillStyle = "white";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      let drawing = false;
+
+      const socket = new WebSocket(`ws://${window.location.host}/ws`);
+
+      socket.onopen = () => console.log("WebSocket connected");
+      socket.onmessage = (event) => {
+        if (event.data instanceof Blob) {
+          const img = new Image();
+          const url = URL.createObjectURL(event.data);
+          img.src = url;
+          img.onload = () => {
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            URL.revokeObjectURL(url);
+          };
+        }
+      };
+      socket.onclose = () => console.log("WebSocket disconnected");
+
+      canvas.addEventListener("mousedown", (e) => {
+        drawing = true;
+        erase(e);
+      });
+      canvas.addEventListener("mouseup", () => (drawing = false));
+      canvas.addEventListener("mouseleave", () => (drawing = false));
+      canvas.addEventListener(
+        "mousemove",
+        throttle((e) => {
+          if (drawing) erase(e);
+        }, 50)
+      );
+
+      function erase(e) {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const brushSize = 1;
+
+        const color = [0, 0, 0];
+        ctx.fillStyle = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+        ctx.beginPath();
+        ctx.arc(x, y, brushSize / 2, 0, 2 * Math.PI);
+        ctx.fill();
+
+        sendPaintAction(x, y, brushSize, color);
+      }
+
+      function sendPaintAction(x, y, brushSize, color) {
+        fetch("/paint", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ x, y, brush_size: brushSize, color }),
+        })
+          .then((response) => response.json())
+          .catch((error) =>
+            console.error("Error sending paint action:", error)
+          );
+      }
+
+      function throttle(func, limit) {
+        let lastFunc;
+        let lastRan;
+        return function () {
+          const context = this;
+          const args = arguments;
+          if (!lastRan) {
+            func.apply(context, args);
+            lastRan = Date.now();
+          } else {
+            clearTimeout(lastFunc);
+            lastFunc = setTimeout(() => {
+              if (Date.now() - lastRan >= limit) {
+                func.apply(context, args);
+                lastRan = Date.now();
+              }
+            }, limit - (Date.now() - lastRan));
+          }
+        };
+      }
+
+      // Control buttons
+      document
+        .getElementById("startButton")
+        .addEventListener("click", async () => {
+          try {
+            const response = await fetch("/start_changes", { method: "POST" });
+            const result = await response.json();
+            if (result.status === "Random changes started") {
+              console.log("Random changes started");
+            } else {
+              console.log(result.status);
+            }
+          } catch (error) {
+            console.error("Error starting random changes:", error);
+          }
+        });
+      // Control buttons
+      document
+        .getElementById("startButton")
+        .addEventListener("click", async () => {
+          try {
+            const response = await fetch("/start_changes", { method: "POST" });
+            const result = await response.json();
+            if (result.status === "Random changes started") {
+              console.log("Random changes started");
+            } else {
+              console.log(result.status);
+            }
+          } catch (error) {
+            console.error("Error starting random changes:", error);
+          }
+        });
+
+      // Control buttons
+      document
+        .getElementById("startButton")
+        .addEventListener("click", async () => {
+          try {
+            const response = await fetch("/start_changes", { method: "POST" });
+            const result = await response.json();
+            if (result.status === "Random changes started") {
+              console.log("Random changes started");
+            } else {
+              console.log(result.status);
+            }
+          } catch (error) {
+            console.error("Error starting random changes:", error);
+          }
+        });
+
+      document
+        .getElementById("stopButton")
+        .addEventListener("click", async () => {
+          try {
+            const response = await fetch("/stop_changes", { method: "POST" });
+            const result = await response.json();
+            if (result.status === "Random changes stopped") {
+              console.log("Random changes stopped");
+            } else {
+              console.log(result.status);
+            }
+          } catch (error) {
+            console.error("Error stopping random changes:", error);
+          }
+        });
+
+      document
+        .getElementById("clearButton")
+        .addEventListener("click", async () => {
+          // Clear the canvas locally
+          ctx.fillStyle = "white";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+          // Clear the image on the server
+          try {
+            const response = await fetch("/clear_image", { method: "POST" });
+            const result = await response.json();
+            if (result.status !== "Image cleared") {
+              console.error("Error clearing image:", result);
+            }
+          } catch (error) {
+            console.error("Error clearing image:", error);
+          }
+        });
+
+      document
+        .getElementById("loadModelForm")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const logPath = document.getElementById("logPath").value;
+
+          try {
+            const response = await fetch("/load_model", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ log_path: logPath }),
+            });
+
+            const result = await response.json();
+
+            if (result.status === "Model loaded successfully") {
+              console.log(result.status);
+              window.location.href = result.redirect_url; // Redirect to the URL provided in the JSON response
+            } else {
+              console.error("Unexpected status:", result.status);
+            }
+          } catch (error) {
+            console.error("Error loading model:", error);
+          }
+        });
+    </script>
+  </body>
+</html>

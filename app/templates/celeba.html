@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% from "config_display.html" import render_config %}
+
+{% block title %}{{ title }} Dataset{% endblock %}
+{% block header %}{{ title }} Dataset{% endblock %}
+
+{% block content %}
+{{ render_config(data) }}
+{% endblock %}
+
+{% block config_panel %}
+<h2 class="text-xl font-bold mb-4 text-slate-800 flex items-center gap-2">
+  <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"></path>
+  </svg>
+  Controls
+</h2>
+
+<button
+  id="rollButton"
+  class="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 w-full flex items-center justify-center gap-2"
+>
+  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+    <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"></path>
+  </svg>
+  Roll Random Condition
+</button>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+  import { setupEraser, setupSeedDot } from "/static/js/painting.js";
+
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+  setupEraser(ctx, 50);
+  setupSeedDot(ctx);
+</script>
+<script>
+  document.getElementById("rollButton").addEventListener("click", async () => {
+    try {
+      const response = await fetch("/roll_condition", { method: "POST" });
+      const result = await response.json();
+      console.log(result);
+    } catch (error) {
+      console.error(error);
+    }
+  });
+</script>
+{% endblock %}

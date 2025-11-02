@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% from "config_display.html" import render_config %}
+
+{% block title %}{{ title }} Dataset{% endblock %}
+{% block header %}{{ title }} Dataset{% endblock %}
+
+{% block content %}
+{{ render_config(data) }}
+{% endblock %}
+
+{% block config_panel %}
+<h2 class="text-xl font-bold mb-4 text-slate-800 flex items-center gap-2">
+  <svg class="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+  </svg>
+  Emoji Controls
+</h2>
+
+<button
+  id="rollButton"
+  class="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-semibold py-3 px-6 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 w-full flex items-center justify-center gap-2 mb-4"
+>
+  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+    <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"></path>
+  </svg>
+  Roll Random Emoji
+</button>
+
+<div class="space-y-2">
+  <h3 class="text-sm font-semibold text-slate-600 mb-2">Select Emoji:</h3>
+  <div class="grid grid-cols-3 gap-2">
+    {% for key, value in data.items() %}
+      {% if key == 'emojis' %}
+        {% for emote in value %}
+          <button
+            class="emote-button bg-gradient-to-br from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 border-2 border-amber-200 hover:border-amber-400 text-3xl py-3 rounded-xl transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md"
+            data-index="{{ loop.index0 }}"
+            title="Emoji {{ loop.index0 }}"
+          >
+            {{ emote }}
+          </button>
+        {% endfor %}
+      {% endif %}
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+  import { setupEraser, setupSeedDot } from "/static/js/painting.js";
+
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+  setupEraser(ctx, 10);
+  setupSeedDot(ctx);
+</script>
+<script>
+  // Roll Random Emoji
+  document.getElementById("rollButton").addEventListener("click", async () => {
+    try {
+      const response = await fetch("/roll_condition", { method: "POST" });
+      const result = await response.json();
+      console.log(result);
+    } catch (error) {
+      console.error(error);
+    }
+  });
+
+  // Select specific emoji
+  document.querySelectorAll(".emote-button").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      const index = event.target.getAttribute("data-index");
+
+      // Visual feedback
+      document.querySelectorAll(".emote-button").forEach(btn => {
+        btn.classList.remove("ring-4", "ring-amber-500");
+      });
+      event.target.classList.add("ring-4", "ring-amber-500");
+
+      try {
+        const response = await fetch("/change_condition", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ index: index }),
+        });
+        const result = await response.json();
+        console.log(`Selected emoji ${index}:`, result);
+      } catch (error) {
+        console.error(error);
+      }
+    });
+  });
+</script>
+{% endblock %}

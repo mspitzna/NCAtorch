@@ -1,0 +1,53 @@
+PROJECT_NAME: "moving_mnist"                 # Name of the project
+TRAIN_NAME: "resnet_res5x5"              # Name of the training run
+SEED: 41                                   # Random seed
+DEVICE: "cuda"                             # Device to use for training
+WANDB: true                               # Flag to enable logging to Weights & Biases
+
+MODEL:
+  NAME: "ResNetCA"
+  HIDDEN_CHANNELS: [128]
+  CHANNEL_N: 32
+  CHANNEL_OUT: 32
+  USE_POSITIONAL_EMBEDDINGS: True
+  LIVING_MASK: false
+  LIVING_MASK_INDEX: 0
+  NORMALIZE_OUTPUT: false
+  PERCEPTIONS:
+    - MODE: conv
+      KERNEL_SIZE: 3
+    - MODE: residual_conv
+      KERNEL_SIZE: 5
+
+TRAINING:
+  BATCH_SIZE: 18
+  STEPS: 100000
+  OVERFLOW_LOSS: true
+  LEARNING_RATE: 0.0005  # Lower peak learning rate
+  WARMUP_STEPS: 10000     # Added warmup steps
+  LR_SCHEDULE_MODE: "cosine"
+  LOSS_FN: "l1"
+  LOG_INTERVAL: 1000
+  SAVE_INTERVAL: 100000
+  ITER_N_MIN: 16
+  ITER_N_MAX: 16
+  INTERMEDIATE_LOGGING_STEPS: [1, 5, 10, 15]
+  GRADIENT_CLIPPING_NORM: 1.0
+  GRADIENT_CHECKPOINTING: False
+  MIXED_PRECISION: False
+
+PATTERN_POOL:
+  ENABLED: true
+  TIMESERIES_POOL: True
+  POOL_SIZE: 2048
+  POOL_DELAY: 50000
+  POOL_START_RATIO: 0.5
+  POOL_END_RATIO: 0.5
+  POOL_MUTATION_RATIO: 0.5
+
+DATASET:
+  NAME: "moving_mnist"                            # Name of the dataset [emoji, e2h, mnist]
+  DATAROOT: "datasets"
+  HISTORY_N: 3
+  TARGET_SIZE: 64
+  REVERSE_SEED: False

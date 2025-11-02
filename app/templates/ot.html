@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% from "config_display.html" import render_config %}
+
+{% block title %}{{ title }} Dataset{% endblock %}
+{% block header %}{{ title }} Dataset{% endblock %}
+
+{% block content %}
+{{ render_config(data) }}
+{% endblock %}
+
+{% block config_panel %}
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+  import { setupEraser } from "/static/js/painting.js";
+
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+  setupEraser(ctx, 25);
+</script>
+{% endblock %}

@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Interactive Image Manipulation{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    canvas {
+      border: 2px solid #4a5568;
+      cursor: crosshair;
+      image-rendering: pixelated;
+    }
+
+    :root {
+      --bs-primary: #0f172a;
+      /* slate-900 */
+      --bs-secondary: #64748b;
+      /* slate-500 */
+      --bs-success: #22c55e;
+      /* green-500 */
+      --bs-danger: #ef4444;
+      /* red-500 */
+      --bs-warning: #f59e0b;
+      /* amber-500 */
+      --bs-info: #3b82f6;
+      /* blue-500 */
+      --bs-dark: #0f172a;
+      /* slate-900 */
+      --bs-light: #f8fafc;
+      /* slate-50 */
+    }
+  </style>
+</head>
+
+<body class="bg-gradient-to-br from-slate-100 via-slate-50 to-blue-50 font-sans leading-normal tracking-normal min-h-screen">
+  <div class="max-w-7xl mx-auto p-6">
+    <h1 class="text-4xl font-bold text-center bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-8 drop-shadow-sm">
+      {% block header %}Interactive Neural CA{% endblock %}
+    </h1>
+
+    <!-- Flex container for canvas, content, and config panel -->
+    <div class="flex gap-6">
+
+      <!-- Global Canvas -->
+      <div class="w-1/2">
+        <div class="bg-white rounded-2xl shadow-xl p-6 mb-6">
+          <canvas id="canvas" width="512" height="512" class="mx-auto rounded-lg shadow-inner border-2 border-slate-200"
+            style="image-rendering: pixelated;"></canvas>
+        </div>
+
+        <!-- Control Buttons -->
+        <div class="flex justify-center gap-3 mb-6">
+          <button id="startButton" class="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold py-3 px-6 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 flex items-center gap-2">
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path>
+            </svg>
+            Start
+          </button>
+          <button id="stopButton" class="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold py-3 px-6 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 flex items-center gap-2">
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clip-rule="evenodd"></path>
+            </svg>
+            Stop
+          </button>
+          <button id="resetButton" class="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-semibold py-3 px-6 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 flex items-center gap-2">
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"></path>
+            </svg>
+            Reset
+          </button>
+          <button id="clearButton" class="bg-gradient-to-r from-slate-500 to-slate-600 hover:from-slate-600 hover:to-slate-700 text-white font-semibold py-3 px-6 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 flex items-center gap-2">
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+            </svg>
+            Clear
+          </button>
+        </div>
+        <!-- Custom Dataset-Specific Content -->
+        <div class="bg-white shadow-xl rounded-2xl p-6">
+          {% block content %}{% endblock %}
+        </div>
+      </div>
+
+      <!-- Block content and config panel (flex child) -->
+      <div class="w-1/2 flex flex-col gap-4">
+
+        <!-- Form for loading model -->
+        <form id="loadModelForm" class="bg-white shadow-xl rounded-2xl px-8 pt-6 pb-8">
+          <div class="mb-4">
+            <label for="logPath" class="block text-slate-700 text-sm font-semibold mb-3 flex items-center gap-2">
+              <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+              </svg>
+              Select Model
+            </label>
+            <select id="logPath" required class="shadow-sm border-2 border-slate-200 rounded-xl w-full py-3 px-4 text-slate-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all">
+              {% for folder in folders %}
+              <option value="{{ folder }}">{{ folder }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button type="submit" class="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-semibold py-3 px-4 rounded-xl w-full shadow-md hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5">
+            Load Model
+          </button>
+        </form>
+
+        <div class="bg-white shadow-xl rounded-2xl px-8 pt-6 pb-8">
+          <div class="relative mb-8">
+            <label for="steps-range" class="block mb-4 text-sm font-semibold text-slate-700 flex items-center gap-2">
+              <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+              </svg>
+              Updates per Second: <span id="steps-value" class="font-bold text-blue-600">24</span>
+            </label>
+            <input id="steps-range" type="range" min="1" max="100" value="50" step="1"
+              class="w-full h-3 bg-gradient-to-r from-blue-200 to-blue-300 rounded-lg appearance-none cursor-pointer slider">
+            <!-- Log-scaled labels -->
+            <div class="flex justify-between mt-2 text-xs text-slate-500 font-medium">
+              <span>1</span>
+              <span>8</span>
+              <span>24</span>
+              <span>57</span>
+              <span>100</span>
+            </div>
+          </div>
+        </div>
+
+        <form id="adjustImageSizeForm" class="bg-white shadow-xl rounded-2xl px-8 pt-6 pb-8">
+          <div class="mb-4">
+            <label for="height" class="block text-slate-700 text-sm font-semibold mb-3 flex items-center gap-2">
+              <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
+              </svg>
+              Canvas Size
+            </label>
+            <input type="text" id="height" placeholder="Enter size (e.g., 512)" required
+              class="shadow-sm border-2 border-slate-200 rounded-xl w-full py-3 px-4 text-slate-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all" />
+          </div>
+          <button type="submit" class="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold py-3 px-4 rounded-xl w-full shadow-md hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5">
+            Adjust Size
+          </button>
+        </form>
+
+        <!-- Dataset-Specific Config Panel -->
+        <div class="bg-white shadow-xl rounded-2xl p-6">
+          {% block config_panel %}{% endblock %}
+        </div>
+
+      </div> <!-- End of block content and config panel -->
+    </div> <!-- End of flex container -->
+  </div>
+</body>
+<script src="https://cdn.socket.io/4.3.2/socket.io.min.js"
+  integrity="sha384-wfD+Zp2cbJ7nMs3a0sBX9cd9I6k8yb5JgOJO55UyLyxBbyPV2uKtg9KxHm1L4Ubs" crossorigin="anonymous"></script>
+<script>
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+
+  ctx.fillStyle = "white";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  let drawing = false;
+
+  const socket = new WebSocket(`ws://${window.location.host}/ws`);
+
+  socket.onopen = () => console.log("WebSocket connected");
+  socket.onmessage = (event) => {
+    if (event.data instanceof Blob) {
+      const img = new Image();
+      const url = URL.createObjectURL(event.data);
+      img.src = url;
+      img.onload = () => {
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+      };
+    }
+  };
+  socket.onclose = () => console.log("WebSocket disconnected");
+
+  // Control buttons
+  document
+    .getElementById("startButton")
+    .addEventListener("click", async () => {
+      try {
+        const response = await fetch("/start_changes", { method: "POST" });
+        const result = await response.json();
+        if (result.status === "Random changes started") {
+          console.log("Random changes started");
+        } else {
+          console.log(result.status);
+        }
+      } catch (error) {
+        console.error("Error starting random changes:", error);
+      }
+    });
+
+  document
+    .getElementById("stopButton")
+    .addEventListener("click", async () => {
+      try {
+        const response = await fetch("/stop_changes", { method: "POST" });
+        const result = await response.json();
+        if (result.status === "Random changes stopped") {
+          console.log("Random changes stopped");
+        } else {
+          console.log(result.status);
+        }
+      } catch (error) {
+        console.error("Error stopping random changes:", error);
+      }
+    });
+
+  document
+    .getElementById("clearButton")
+    .addEventListener("click", async () => {
+      try {
+        const response = await fetch("/clear_image", { method: "POST" });
+        const result = await response.json();
+        if (result.status === "Random changes stopped") {
+          console.log("Random changes stopped");
+        } else {
+          console.log(result.status);
+        }
+      } catch (error) {
+        console.error("Error stopping random changes:", error);
+      }
+    });
+
+  document
+    .getElementById("resetButton")
+    .addEventListener("click", async () => {
+      // Clear the canvas locally
+      ctx.fillStyle = "white";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Clear the image on the server
+      try {
+        const response = await fetch("/reset_image", { method: "POST" });
+        const result = await response.json();
+        if (result.status !== "Image cleared") {
+          console.error("Error clearing image:", result);
+        }
+      } catch (error) {
+        console.error("Error clearing image:", error);
+      }
+    });
+
+  document
+    .getElementById("loadModelForm")
+    .addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const logPath = document.getElementById("logPath").value;
+
+      try {
+        const response = await fetch("/load_model", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ log_path: logPath }),
+        });
+
+        const result = await response.json();
+
+        if (result.status === "Model loaded successfully") {
+          console.log(result.status);
+          window.location.href = result.redirect_url; // Redirect to the URL provided in the JSON response
+        } else {
+          console.error("Unexpected status:", result.status);
+        }
+      } catch (error) {
+        console.error("Error loading model:", error);
+      }
+    });
+
+  document
+    .getElementById("adjustImageSizeForm")
+    .addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const height = document.getElementById("height").value;
+      //const width = document.getElementById("width").value;
+
+      try {
+        const response = await fetch("/adjust_image_size", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ height: height, width: height }),
+        });
+
+        const result = await response.json();
+
+        if (result.status === "Image size adjusted") {
+          console.log(result.status);
+        } else {
+          console.error("Unexpected status:", result.status);
+        }
+      } catch (error) {
+        console.error("Error adjusting image size:", error);
+      }
+    });
+
+  document.getElementById("steps-range").addEventListener("input", async (e) => {
+    const fraction = (e.target.value - e.target.min) / (e.target.max - e.target.min);
+
+    const steps = e.target.value;
+    const minVal = 0.5;
+    const maxVal = 100;
+    const midVal = 24;    // desired value at 50%
+    const midFraction = 0.5;
+
+    // Calculate ratio and exponent p:
+    const ratio = maxVal / minVal;  // 200
+    // Solve (0.5 * ratio^( (0.5)^p )) = 24  for p
+    const c = Math.log(midVal / minVal) / Math.log(ratio);  // log(48)/log(200)
+    const p = Math.log(c) / Math.log(midFraction);          // ~0.454
+
+    // Now compute your value for any fraction in [0..1]:
+    function logMappedValue(fraction) {
+      return minVal * Math.pow(ratio, Math.pow(fraction, p));
+    }
+
+    const logValue = logMappedValue(fraction);
+    document.getElementById("steps-value").textContent = Math.round(logValue);
+    // Send the steps to the server
+    try {
+      const response = await fetch("/set_speed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ speed: logValue }),
+      });
+
+      const result = await response.json();
+
+      if (result.status === "Speed set") {
+        console.log(result.status);
+      } else {
+        console.error("Unexpected status:", result.status);
+      }
+    } catch (error) {
+      console.error("Error setting steps:", error);
+    }
+  });
+</script>
+{% block scripts %}{% endblock %}
+</body>
+
+</html>
