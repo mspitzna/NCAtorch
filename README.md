@@ -46,13 +46,13 @@ git clone https://github.com/mspitzna/nca-torch.git
 cd nca-torch
 ```
 
-2. Install dependencies:
+2. Install PyTorch (if not already installed):
+Visit https://pytorch.org/get-started/locally/ for platform-specific instructions.
+
+3. Install other dependencies:
 ```bash
 pip install -r requirements.txt
 ```
-
-3. Install PyTorch (if not already installed):
-Visit https://pytorch.org/get-started/locally/ for platform-specific instructions.
 
 ### Training Your First Model
 
