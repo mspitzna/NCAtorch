@@ -1,31 +1,45 @@
-# NCAtorch
+<div align="center">
+  <img src="figures/nca_torch_logo.png" alt="NCA-torch Logo" width="400"/>
 
-A comprehensive PyTorch-based framework for Neural Cellular Automata (NCA) research and applications.
+  <h1>NCA-torch</h1>
 
-## Overview
+  <p>
+    <em>A comprehensive PyTorch-based framework for Neural Cellular Automata research and applications</em>
+  </p>
 
-NCAtorch is a modular research framework that combines classical Cellular Automata concepts with learnable neural networks. This implementation provides a unified codebase for training, evaluating, and visualizing Neural Cellular Automata across diverse tasks including image generation, texture synthesis, classification, and video prediction.
+  [📚 Documentation](#documentation) | [🚀 Quick Start](#quick-start) | [💡 Examples](#examples) | [🎨 Demo](#interactive-visualization)
 
-## Features
+  ---
+</div>
 
-- **Modular Architecture**: Composable perception and update modules for flexible experimentation
-- **Multiple Perception Strategies**: Sobel filters, standard convolutions, deformable convolutions, residual connections, and attention mechanisms
-- **Diverse Tasks**: Image generation (emoji, handbags), texture synthesis, self-classifying NCAs, video prediction
-- **Latent Space NCAs**: High-resolution generation via pre-trained autoencoders
-- **Interactive Visualization**: Real-time FastAPI-based web interface with painting tools
-- **Robust Training**: Sample pooling with damage and mutation mechanisms
-- **Experiment Tracking**: Integrated Weights & Biases logging
-- **YAML Configuration**: Pydantic-validated configuration system
+## 🌟 Highlights
 
-## Installation
+**NCA-torch** is an open-source, modular research framework that combines classical Cellular Automata concepts with learnable neural networks. This implementation provides a unified codebase for training, evaluating, and visualizing Neural Cellular Automata across diverse tasks.
 
-### Prerequisites
+Key features:
+
+- 🎯 **Modular Architecture**: Composable perception and update modules for flexible experimentation
+- 🎨 **Diverse Tasks**: Image generation (emoji, handbags), texture synthesis, self-classifying NCAs, video prediction
+- 🖼️ **Latent Space NCAs**: High-resolution generation (512x512) via pre-trained autoencoders
+- 🎮 **Interactive Visualization**: Real-time FastAPI-based web interface with painting tools
+- 📊 **Experiment Tracking**: Integrated [Weights & Biases](https://wandb.ai/site/) logging
+- ⚙️ **YAML Configuration**: Pydantic-validated configuration system
+
+## 📑 What's New
+
+- **[2025-11]** 🎉 Initial release of NCA-torch framework
+
+## 🚀 Quick Start
+
+### Installation
+
+#### Prerequisites
 
 - Python 3.12 or higher
 - CUDA-capable GPU (recommended)
 - PyTorch 2.0+
 
-### Setup
+#### Setup
 
 1. Clone the repository:
 ```bash
@@ -39,17 +53,17 @@ pip install -r requirements.txt
 ```
 
 3. Install PyTorch (if not already installed):
-https://pytorch.org/get-started/locally/
+Visit https://pytorch.org/get-started/locally/ for platform-specific instructions.
 
-## Quick Start
-
-### Training
+### Training Your First Model
 
 Train an NCA model using a configuration file:
 
 ```bash
 python train_scripts/train_ca.py --config config/emoji_config.yaml --device cuda
 ```
+
+💡 **Tip**: Start with the emoji generation task for quick results and visual feedback!
 
 ### Interactive Visualization
 
@@ -61,31 +75,9 @@ uvicorn app.fastapi_backend:app --reload
 
 Then open your browser to `http://localhost:8000`
 
-## Project Structure
+## ⚙️ Configuration
 
-```
-nca-torch/
-├── nca/                      # Core library
-│   ├── core/
-│   │   ├── models/          # NCA models, autoencoders, critics
-│   │   └── losses/          # Loss functions
-│   ├── data/
-│   │   └── datasets/        # Dataset implementations
-│   ├── training/
-│   │   └── trainers/        # Training logic
-│   └── utils/               # Utilities and visualization
-├── app/                      # FastAPI web application
-│   ├── fastapi_backend.py   # Server entry point
-│   ├── templates/           # HTML templates
-│   └── scripts/             # Frontend JavaScript
-├── train_scripts/            # Training entry points
-├── config/                   # YAML configuration files
-└── datasets/                 # Dataset storage
-```
-
-## Configuration
-
-Models and training are configured via YAML files. Example:
+Models and training are configured via YAML files. Here's a basic example:
 
 ```yaml
 PROJECT_NAME: "your_project"
@@ -118,34 +110,88 @@ DATASET:
     - "🔥"
 ```
 
-See [config/](config/) directory for complete examples.
+💡 **See** [config/](config/) **directory for complete examples of all supported tasks.**
 
-## Supported Tasks
+## 🎯 Supported Tasks
 
-### Image Generation
+### 🖼️ Image Generation
 - **Emoji Generation**: Generate emoji from Unicode characters
 - **Edge-to-Handbag (E2H)**: Conditional generation from edge maps
 
-### Texture Synthesis
+### 🎨 Texture Synthesis
 - **Organizing Textures**: DTD texture synthesis with style loss
 
-### Classification
+### 🔢 Classification
 - **MNIST**: Self-classifying digit recognition
 - **CIFAR-10**: Multi-class image classification
 
-### Video Prediction
+### 🎬 Video Prediction
 - **Moving MNIST**: Temporal dynamics and video prediction
 
-### High-Resolution Generation
+### 🖼️ High-Resolution Generation
 - **Latent Space NCAs**: 512x512 generation via pre-trained autoencoders
 
+## 📂 Project Structure
 
-## Related Projects
+```
+nca-torch/
+├── nca/                      # Core library
+│   ├── core/
+│   │   ├── models/          # NCA models, autoencoders, critics
+│   │   └── losses/          # Loss functions
+│   ├── data/
+│   │   └── datasets/        # Dataset implementations
+│   ├── training/
+│   │   └── trainers/        # Training logic
+│   └── utils/               # Utilities and visualization
+├── app/                      # FastAPI web application
+│   ├── fastapi_backend.py   # Server entry point
+│   ├── templates/           # HTML templates
+│   └── scripts/             # Frontend JavaScript
+├── train_scripts/            # Training entry points
+├── config/                   # YAML configuration files
+└── datasets/                 # Dataset storage
+└── train_log/                # Training logs
+```
+
+## 📚 Documentation
+
+For detailed documentation on:
+- Implementing custom perception modules
+- Loss function implementations
+- Dataset preparation
+- Advanced training techniques
+
+Please refer to the [docs/](docs/) directory (coming soon).
+
+## 🔗 Related Projects
 
 - [Growing Neural Cellular Automata](https://distill.pub/2020/growing-ca/) - Original work by Mordvintsev et al.
 - [Self-Organising Textures](https://distill.pub/selforg/2021/textures/) - Texture synthesis with NCAs
 - [Self-classifying MNIST Digits](https://distill.pub/2020/selforg/mnist/) - Classification with NCAs
+- TODO
 
-## Authors
+## 📝 Citation
+
+If you find this work useful, please consider citing:
+
+```bibtex
+@software{ncatorch2025,
+  title={TBA},
+  author={TBA},
+  year={TBA},
+  url={TBA}
+}
+```
+
+## 👥 Authors
+
+TODO
+
+## 📄 License
+
+TODO
+
+## Contact Us
 
 TODO
