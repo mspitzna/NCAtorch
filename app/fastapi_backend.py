@@ -207,7 +207,7 @@ def get_trainlog_folders():
             # Return relative path starting with "train_log"
             rel_path = os.path.join(os.path.relpath(root, TRAINLOG_ROOT))
             folders.append(rel_path)
-    return folders
+    return sorted(folders, reverse=True)
 
 
 
