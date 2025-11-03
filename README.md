@@ -43,7 +43,7 @@ Key features:
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/nca-torch.git
+git clone https://github.com/mspitzna/nca-torch.git
 cd nca-torch
 ```
 
