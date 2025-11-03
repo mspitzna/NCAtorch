@@ -58,7 +58,7 @@ random_changes_event = asyncio.Event()
 # ========================
 # Initialize CA and State Handlers
 # ========================
-log_path = "/home/mspitzna/nca-torch/train_log/resnet_conv5x5_20251010_100155"  # Adjust as needed
+log_path = "./train_log/emoji_conv3x3"  # Adjust as needed
 ca_handler = CaHandler()
 config = ca_handler.load_model(log_path)
 IMG_SIZE, COLOR_DIM, COND_DIM, x_tensor, current_input_image, cond = ca_handler.get_initial_data()

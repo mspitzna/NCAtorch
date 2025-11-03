@@ -209,5 +209,6 @@ __marimo__/
 
 datasets/*
 train_log/*
+!train_log/emoji_conv3x3
 wandb/*
 .claude/
