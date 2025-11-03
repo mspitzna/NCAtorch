@@ -1,0 +1,642 @@
+
+\documentclass[10pt]{article} % For LaTeX2e
+\usepackage{tmlr}
+% If accepted, instead use the following line for the camera-ready submission:
+%\usepackage[accepted]{tmlr}
+% To de-anonymize and remove mentions to TMLR (for example for posting to preprint servers), instead use the following:
+%\usepackage[preprint]{tmlr}
+
+% Optional math commands from https://github.com/goodfeli/dlbook_notation.
+\input{math_commands.tex}
+
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{cleveref}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{wrapfig}
+
+\title{A New Kind of Network? Review and Reference Implementation of \textit{Neural Cellular Automata}. }
+
+% Authors must not appear in the submitted version. They should be hidden
+% as long as the tmlr package is used without the [accepted] or [preprint] options.
+% Non-anonymous submissions will be rejected without review.
+
+\author{\name Kyunghyun Cho \email kyunghyun.cho@nyu.edu \\
+      \addr Department of Computer Science\\
+      University of New York
+      \AND
+      \name Raia Hadsell \email raia@google.com \\
+      \addr DeepMind
+      \AND
+      \name Hugo Larochelle \email hugolarochelle@google.com\\
+      \addr Mila, Universit\'e de Montr\'eal \\
+      Google Research\\
+      CIFAR Fellow}
+
+% The \author macro works with any number of authors. Use \AND 
+% to separate the names and addresses of multiple authors.
+
+\newcommand{\fix}{\marginpar{FIX}}
+\newcommand{\new}{\marginpar{NEW}}
+
+\def\month{MM}  % Insert correct month for camera-ready version
+\def\year{YYYY} % Insert correct year for camera-ready version
+\def\openreview{\url{https://openreview.net/forum?id=XXXX}} % Insert correct link to OpenReview for camera-ready version
+
+
+\begin{document}
+
+
+\maketitle
+
+\begin{abstract}
+\textit{Stephen Wolfram} proclaimed in his 2003 seminal work \textit{``A New Kind Of Science''} that simple recursive programs in form of \textit{Cellular Automata} (CA) are a promising approach to replace currently used mathematical formalizations, e.g. differential equations, to improve the modeling of complex systems.    
+Over two decades later, while \textit{Cellular Automata} still have been waiting for a substantial breakthrough in scientific applications, recent research showed new and promising approaches which combine\textit{Wolfram's} ideas with learnable Artificial Neural Networks: So-called \textit{Neural Cellular Automata} (NCA) are able to learn the complex update rules of CA from data samples allowing to model complex, self-organizing generative systems.\\
+The aim of this paper is to review the existing work on NCA and provide a unified theory, as well as a reference implementation in the open source library \textit{\textbf{NCAtorch}}.\\
+
+Source Code: \url{https://somelinktolib.com} 
+\end{abstract}
+
+% TODO
+\section{Introduction}
+
+%
+\subsection{Cellular Automata}
+\begin{wrapfigure}{r}{0.55\textwidth}
+\vspace{-0.5cm}
+%    \begin{minipage}{0.5\textwidth}
+    \centering
+        \includegraphics[scale=1.4]{imgs/binaryCAv3.png} 
+%    \end{minipage}
+    \caption{Visualization of a simple, 1D CA with binary states. a) shows the recursive update of grid states over time by applying the update rules $\mathcal{R}$  on the $3\times 1$ cell neighborhoods show in b).}
+\label{fig:basicCA}
+%\vspace{-0.5cm}
+\end{wrapfigure}
+\textit{Cellular Automata} (CA) have been a subject of study since the 1940s, notably by \textit{John von Neumann} \citep{von1966theory} and others. At its core, a \textit{Cellular Automata} are discrete computational models, which consist of a finite, regular grid $\mathcal{G}$ of discrete cells. Each cell holds a discrete state $s_{i,t}$ at a given discrete time-step $t$.
+As time progresses, cell states are updated recursively and synchronously across all cells, based on a set of rules $\mathcal{R}$ that utilize the local neighborhood $\mathcal{N}(s_{i,t})$ to calculate the new cell state: $s_{i,t+1}:=\mathcal{R}[\mathcal{N}(s_{i,t})]$ \citep{schiff2011cellular}. Figure \ref{fig:basicCA} shows the computation process and rules for a basic CA with binary states ($s_{(x,y),t} \in \{0,1\})$.\\
+\textit{Cellular Automata} gained significant public recognition in the 1970s through \textit{Conway's "Game of Life"} \citep{conway1970game}. This game employed a binary \textit{Cellular Automaton} on a two-dimensional grid and update-rules based on a $3\times 3$ neighborhood.\\
+\noindent\textbf{Applications and Theoretical Significance.}
+Subsequent research demonstrated the broad applicability of CAs, including their use in \textit{biological} \citep{coombes2009geometry, bouligand1986fibroblasts, hatzikirou2012go}, \textit{chemical} \citep{gerhardt1989cellular}, and \textit{physical modeling} \citep{wolfram1983statistical, zaluska2021step}. Furthermore, certain CA configurations were shown to possess powerful theoretical computing properties, such as \textit{Turing Completeness} \citep{cook2004universality} of certain CA configurations, thus establishing CAs as a \textit{universal computing model}.\\
+This theoretical strength led \textit{Stephen Wolfram} to propose his well-known work, \textit{\textbf{``A New Kind Of Science''}} \citep{wolfram2003new}. In it, he suggested that inherently limited mathematical formulations could be replaced by more powerful \textit{``simple programs''} and formulated a new formal framework for numerous scientific applications grounded in \textit{Cellular Automata}.
+
+\subsection{Basic \textit{Neural Cellular Automata}}
+
+\noindent\textbf{From Fixed Rules to Neural Networks.}
+\textit{Traditional Cellular Automata (CA)}, as initially proposed by \citep{wolfram2003new}, \citep{conway1970game}, and \citep{von1966theory}, are constructed using a fixed set of \textbf{manually designed rules}. For instance, the update rule shown in Figure \ref{fig:basicCA} is known as \textit{``Rule \#110''} (named after the binary coding of the rule outputs), which is one of $2^{2^3}=256$ possible rules for a 1D, binary-state CA with a neighborhood size of $3$, first introduced in \citep{wolfram2003new}.\\
+\begin{wrapfigure}{l}{0.5\textwidth}
+%\vspace{-1.5cm}
+%   \begin{minipage}{0.5\textwidth}
+    \centering
+        \includegraphics[scale=0.5]{imgs/nca.png} 
+%    \end{minipage}
+    \caption{Sketch of a basic CNN implementation of a 2D NCA with a 3D state space. The initial grid is fed into a CNN architecture which updates the state additively and is called recursively for each time step. During training, the network is trained via usual gradient updates computed per timestep.}
+\label{fig:basicNCA}
+%\vspace{-0.5cm}
+\end{wrapfigure}
+While all potential rules for a specific CA with predetermined discrete states $\mathcal{S}$ and neighborhood-size $\mathcal{|N|}$ can be generated combinatorially, these rule-spaces unfortunately \textbf{grow exponentially}. Even the relatively simple 2D binary CA used in the \textit{Game of Life} already has $2^{2^{3\times 3}}=2^{512}$ possible rules for its $3\times 3$ neighborhood. This challenge has made the idea of \textbf{learning more complex rules from data} — instead of designing them by hand — increasingly appealing.\\
+\citep{mordvintsev2020growing} introduced the concept of \textit{Neural Cellular Automata} (NCA), which essentially substitutes the manually designed rules with artificial Neural Networks that are trained on problem-specific data.
+Equation \ref{eq:nn_update} provides an abstract formalization of an NCA update function, where $f_\phi$ denotes an arbitrary neural network with learnable parameters $\phi$.
+\begin{equation}
+s_{i,t+1}:=s_{i,t}+f_\phi[\mathcal{N}(s_{i,t})], \quad s_i \in \mathcal{S}
+\label{eq:nn_update}
+\end{equation}
+Since $f_\phi$ is \textbf{space-invariant} with respect to the grid $\mathcal{G}$ (meaning the same $f_\phi$ is applied at all positions $i$ during a time step), \citep{mordvintsev2020growing} suggested an efficient implementation using ``nested'' \textit{Convolutional Neural Networks (CNNs)} \citep{lecun1998convolutional}. In its simplest form, the kernels (or filters) of a single convolutional layer model a \textbf{learnable perception} $\mathcal{P}_{\mathcal{N},\phi}$ of neighborhoods $\mathcal{N}$ matching the kernel size, followed by a \textbf{learnable update layer} $\mathcal{U}_\phi$ implemented as $1\times 1$ convolutions, which together implement learnable non-linear CA update rules $\mathcal{R_\phi}$ on all cells $s$ at time $t$ simultaneously:
+\begin{equation}
+s_{t+1}:=s_{t}+\mathcal{R_\phi}[s_t] := s_{t}+\mathcal{U}_\phi[\mathcal{P}_{\mathcal{N},\phi}*s_{t}]
+\label{eq:cnn_update}
+\end{equation}
+Figure \ref{fig:basicNCA} illustrates this basic CNN-based NCA architecture. The theoretical equivalence between "nested" CNNs and CA has been formally proven by \citep{gilpin2019cellular}. It is important to note, however, that most NCA architectures relax the original CA property of discrete cell states, moving instead toward \textbf{continuous vector state representations} $s_{i,t}\in\mathbb{R}^n$.\\
+%
+While the original work of \citep{mordvintsev2020growing} used a simple, \textit{LeNet}~\citep{lecun2002gradient} like,  1-layer convolutional NCA to show impressive self-organizing and classification tasks on images, later works extended the use of CNNs to more complex network architectures: \citep{sandler2020image} showed NCA based image segmentation with larger CNNs, while \citep{tesfaldet2022attention} introduced an \textit{attention} based implementation. NCAs based on GANs \citep{otte2021generative}, VARs \citep{palm2022variational} or diffusion \citep{kalkhof2024frequency} also have been utilized for generative tasks. \citep{grattarola2021learning} applied a NCA based approach on graph data. 
+\subsection{Contributions}
+The contributions of this paper are threefold: I) We summarize the existing works on NCA in the (to the best of our knowledge) first systematic review of this novel research topic. II) We introduce a unified theoretic framework, notation and experimental evaluation of NCA. III) We provide \textit{\textbf{NCAtorch}}\footnote{https://somelinktolib.com}, a \textit{PyTorch}~\citep{paszke2019pytorch} based open source library, which includes many novel details for efficient and stable NCA implementations.   
+
+
+
+
+% ---- FRAMEWORK ----
+\section{Reference Implementation: the \textit{NCAtorch} Framework}
+\label{sec:framework}
+To facilitate systematic and reproducible research in NCA, we introduce a modular and extensible framework for experimentation. Its central objective is to compare different NCA architectures and components across a spectrum of tasks. The framework is built around an abstract base model, with key components managed through YAML files and \textit{pydantic} for type-safe configuration. This design allows researchers to seamlessly implement and integrate new perception modules, training routines, and datasets. To ensure traceability, all training metrics and visualizations are optionally logged via Weights \& Biases~\citep{wandb}.
+
+\noindent\textbf{Modular Design Philosophy.}
+Following the general NCA formulation $\mathbf{s}_{t+1} = \mathbf{s}_{t} + \mathcal{D}_\phi[\mathcal{P}_\theta(\mathbf{s}_{t})]$ from Equation~\ref{eq:cnn_update}, our framework architecture is organized into four core components that can be independently configured and combined: (1) \textit{Cell State Representation} $\mathbf{s}_t \in \mathbb{R}^{H \times W \times C}$: defining what information each cell stores and propagates across the $H \times W$ grid with $C$ channels. (2) \textit{Perception Module} $\mathcal{P}_\theta$: determining how cells sense their local neighborhood and extract spatial features with learnable parameters $\theta$. (3) \textit{Update Module} $\mathcal{D}_\phi$: computing state transitions from perceived features with parameters $\phi$; and (4) \textit{Training Infrastructure}: managing optimization, logging, and specialized training strategies such as Sample Pooling. This separation of concerns serves two critical purposes. First, it enables \textit{systematic experimentation}: by keeping the update module, training protocol, and cell state structure constant while varying only the perception module, we can isolate and quantify the impact of different perception strategies on learning dynamics, generation quality, and robustness (Section~\ref{sec:experiments}). Second, it promotes \textit{extensibility}: new perception types, loss functions, or training mechanisms can be integrated as drop-in replacements without modifying the core architecture. The framework thus functions both as a research tool for controlled comparative studies and as a flexible platform for exploring novel NCA designs.
+
+\subsection{Modular CA Model and Perceptions}
+
+\noindent\textbf{Cell State Representation.}
+At the core of our approach is a highly adaptable CA model with a customizable cell state representation. Each cell's state vector can be structured to contain: (i) \textit{visible channels} for observable outputs (e.g., RGB values for image generation), (ii) \textit{hidden channels} for internal computation and information propagation, (iii) \textit{condition channels} for fixed global or local conditioning signals (e.g., target class labels, spatial guidance), and optional (iv) \textit{classification channels} for evolving class predictions in recognition tasks. This flexibility allows the same architectural foundation to be adapted across generation, classification, and video prediction tasks (Section~\ref{sec:experiments}). During each forward pass, the evolving state channels are concatenated with any auxiliary condition channels (e.g., class labels broadcast spatially or edge maps for conditional generation) to prepare the input for the perception module.
+
+%\begin{wrapfigure}{r}{0.5\textwidth}
+%%\vspace{-1.5cm}
+%%   \begin{minipage}{0.5\textwidth}
+%    \centering
+%        \includegraphics[scale=0.45]{imgs/nca_framework.png} 
+%%    \end{minipage}
+%    \caption{TODO Figure}
+%\label{fig:nca_framework}
+%%\vspace{-0.5cm}
+%\end{wrapfigure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\linewidth]{imgs/nca_framework.png} 
+    \caption{Overview of a single NCA iteration step. The cell state consists of visible channels (e.g., RGB), hidden channels for internal representations, and optional classification or conditioning channels. The perception module processes the cell state using one of several configurable options. The update module processes the perceived features to compute state updates. Stochastic updates and alive masking are applied before updating the visible, hidden, and optional classification channels to form the new cell state for the next iteration.}
+    \label{fig:nca_framework}
+\end{figure}
+
+\noindent\textbf{Perception Module.}
+The perception module functions as the sensory component of the CA, extracting local spatial features from the cell state grid. Critically, the framework supports a wide array of interchangeable perception strategies as independent modules, enabling systematic comparative evaluation of their impact on learning dynamics and robustness. We provide implementations of five distinct perception mechanisms: (i) \textit{Convolution Perception}: standard convolution with configurable perception size (kernel size) and dilation rate. (ii) \textit{Attention Perception}: self-attention with adjustable perception radius~\citep{tesfaldet2022attentionbasedneuralcellularautomata}. (iii) \textit{Sobel Perception}: gradient-based edge detection with fixed $3 \times 3$ kernel. (iv) \textit{Deformable Perception}: deformable convolution with learnable spatial offsets and configurable perception size and (v) \textit{Residual Perception}: residual convolution with two sequential convolutional layers and skip connections, with configurable perception size. All configurable perception modules expose perception size as a hyperparameter, facilitating controlled experimentation on the influence of receptive field scope on emergent behavior.
+
+\noindent\textbf{Update Module.}
+The update module computes the incremental state change $\Delta \mathbf{s}$ based on features extracted by the perception module. It is implemented as a configurable sequence of convolutional layers with non-linear activations (e.g., ReLU), defaulting to a single depthwise convolution for computational efficiency. After computing the update, a stochastic update mask is applied for asynchronous updates and, optionally, a living mask. The masked update is then aggregated with the current state to complete one iteration.
+
+\noindent\textbf{Living Mask Mechanism.}
+To enable robust pattern regeneration and boundary formation, our framework implements an optional living mask that enforces cell viability constraints during state evolution~\cite{mordvintsev2020growing}. The mechanism operates on a designated alpha channel $\mathbf{s}_t[:, \alpha]$ within the cell state. A cell is considered alive if its alpha value exceeds a threshold $\tau = 0.1$. The living mask is computed both before and after the state update, and only cells that remain alive in both states are allowed to persist: $\mathcal{M} = \mathcal{M}_{\text{pre}} \land \mathcal{M}_{\text{post}}$. This combined mask is applied element-wise to zero out dead cells: $\mathbf{s}_{t+1} = \mathbf{s}_{t+1} \times \mathcal{M}$. This mechanism prevents uncontrolled growth, enforces stable pattern boundaries, and enables targeted damage experiments where cells can be selectively removed and the system tested for regeneration capability.
+
+\subsection{Trainer Framework and Training Strategy}
+Our training framework features an abstract base trainer that encapsulates core functionalities such as optimizer initialization (e.g., AdamW), learning rate scheduling (e.g., cosine annealing), checkpointing, and comprehensive logging, including monitoring of intermediate evolution steps (\cref{fig:logging}). The base trainer handles technical aspects like mixed precision, gradient clipping, gradient accumulation, and optional gradient checkpointing for memory efficiency.
+
+\begin{wrapfigure}{r}{0.5\textwidth}
+%\vspace{-1.5cm}
+%   \begin{minipage}{0.5\textwidth}
+    \centering
+        \includegraphics[scale=0.4]{imgs/logging_sample_pooling.png} 
+%    \end{minipage}
+    \caption{Sample pooling mechanism during training. Starting from seed states (top row), the NCA evolves over multiple steps toward target patterns (bottom row). Intermediate states at steps 5, 20, and 40 show the progressive refinement. The sample pool retains evolved states from previous training iterations, which are randomly selected and reintroduced into new training batches, optionally with applied perturbations or mutations, to improve robustness and stability.}
+\label{fig:logging}
+\vspace{-0.5cm}
+\end{wrapfigure}
+
+Specialized trainers can be derived from this base to target specific objectives. Functionalities such as latent space evolution are integrated at the model level for broader applicability.
+
+\subsection{Sample Pool Mechanism} \label{c:sp}
+To enhance training dynamics and stability, particularly for generative tasks, our framework incorporates the sample pool mechanism~\citep{mordvintsev2020growing}. This module retains and reuses representative samples from previous iterations, as visualized in~\cref{fig:logging}, which are reintroduced into training batches based on a configurable ratio. To increase robustness, the sample pool employs a controlled perturbation process, such as applying a masking function to reintroduced samples to simulate damage or partial observability. This mechanism helps balance exploration and exploitation, contributing to a more robust training process for NCAs.
+
+
+\subsection{Visualization Toolkit}
+
+\begin{wrapfigure}{r}{0.5\textwidth}
+%\vspace{-1.5cm}
+%   \begin{minipage}{0.5\textwidth}
+    \centering
+        \includegraphics[scale=0.5]{imgs/vis_toolkit.png} 
+%    \end{minipage}
+    \caption{Interactive web-based visualization toolkit for real-time NCA model inference and exploration.}
+\label{fig:vis_toolkit}
+\vspace{-0.5cm}
+\end{wrapfigure}
+
+Our visualization toolkit provides an interactive interface to explore and evaluate trained CA models. Built on a FastAPI backend with Jinja2 templates, it enables real-time observation of the model's state evolution in a web browser. The toolkit supports dataset-specific functionalities, such as painting MNIST digits or dynamically changing targets for emoji generation to test regeneration. This interactivity facilitates detailed qualitative analysis and an intuitive understanding of the CA dynamics. An example of the visualization interface is shown in~\cref{fig:vis_toolkit}.
+
+% ---- EXPERIMENTS -----
+
+\section{Evaluation of Neural Cellular Automata}
+\label{sec:experiments}
+We present a systematic evaluation of existing NCA work, extending prior approaches with additional enhancements to perception mechanisms and training protocols. Our experiments are designed to rigorously evaluate the proposed framework, with a particular focus on the impact of the perception module on NCA performance. By systematically varying the perception mechanism, we isolate its influence on learning dynamics, emergent behavior, and robustness. A key aspect of our evaluation is quantifying the NCA's ability to regenerate target structures after significant perturbations, such as targeted cell removal (\textbf{damage}) or random condition alterations (\textbf{mutation}). This assessment allows us to measure the resilience inherent in different perception designs.
+
+Our evaluation spans \textbf{image generation} (\ref{sec:image_gen}), including conditional emoji generation, Edge-to-Handbag translation, and latent space NCAs. \textbf{texture generation} (\ref{sec:texture}) with style-based synthesis on the DTD dataset. \textbf{classification} (\ref{sec:classification}) via self-classifying NCAs on MNIST and CIFAR-10. and \textbf{video transition} (\ref{sec:video_transition}) with temporal dynamics learning on MovingMNIST.
+
+% IMAGE GEN
+\subsection{Image Generation (Emoji, E2H, MNIST)}
+\label{sec:image_gen}
+In the image generation tasks, we assess the ability of NCAs equipped with different perception modules to grow and maintain specific target images, typically starting from a minimal initial state, such as a single seed pixel. The modular perception architecture (Section~\ref{sec:framework}) enables a systematic comparison of Sobel filters, standard convolutions (3×3, 5×5), deformable convolutions, and MultiPerception strategies while keeping all other components constant. Our experiments focused on two primary tasks: generating static Emoji images~\citep{mordvintsev2020growing} and performing image-to-image translation with the Edge-to-Handbag (E2H) dataset~\citep{isola2018imagetoimagetranslationconditionaladversarial}.
+
+\subsubsection{Emoji Task}
+
+\noindent\textbf{Prior Work.}
+The original Growing CA work by \citep{mordvintsev2020growing} demonstrated that NCAs could learn to grow and maintain a single target emoji image from a seed pixel using simple convolutional perception and MSE loss. A key innovation was the introduction of the \textit{Sample Pooling} mechanism, where training batches include samples drawn from previously generated states rather than always starting from a clean seed. This technique significantly improved the model's ability to recover from perturbations and maintain stable patterns over extended evolution periods~\citep{randazzo2021adversarial}.
+
+\begin{wrapfigure}{r}{0.5\textwidth}
+%\vspace{-1.5cm}
+%   \begin{minipage}{0.5\textwidth}
+    \centering
+        \includegraphics[scale=0.5]{imgs/cond_nca.png} 
+%    \end{minipage}
+    \caption{Architecture of conditional NCA. The cell state includes visible RGB channels, hidden channels, and a dedicated condition dimension containing a one-hot encoded target class vector spatially broadcast across all cells.}
+\label{fig:condNCA}
+%\vspace{-0.5cm}
+\end{wrapfigure}
+
+\noindent\textbf{Our Extension.}
+We extend this foundational work in three key directions. First, we implement \textit{conditional multi-class generation} by adding a dedicated condition dimension to the cell state, as visualized in \cref{fig:condNCA}. With this, a single NCA model is able to generate and transition between multiple emoji classes (we use 5 distinct emojis). This is achieved by encoding the target emoji as a one-hot vector that is spatially broadcast across all cells, providing a global conditioning signal. Second, we systematically evaluate the impact of different perception modules on both generation quality and robustness, comparing Sobel filters, standard convolutions (3x3, 5x5), deformable convolutions, and a Combined MultiPerception strategy. Third, we enhance the training protocol to explicitly promote adaptation capabilities: during training we not only apply spatial damage to pooled samples but also randomly \textit{mutate} the target emoji condition, forcing the NCA to learn transitions between different target patterns.
+
+\begin{table}[htbp] 
+\centering
+\caption{Emoji Generation Performance: Mean Squared Error (MSE) Loss and Regeneration Percentage after Damage and Mutation for Different Perception Modules. Lower MSE is better; higher Regeneration is better.}
+\label{tab:emoji_combined}
+\begin{tabular}{lcccc|cccc}
+\hline
+& \multicolumn{4}{c}{\textbf{Damage}} & \multicolumn{4}{c}{\textbf{Mutation}} \\
+\hline
+\textbf{Perception} & \textbf{MSE} $\downarrow$ & \textbf{MSE} $\downarrow$ & \textbf{MSE} $\downarrow$ & \textbf{Reg.} $\uparrow$ & \textbf{MSE} $\downarrow$ & \textbf{MSE} $\downarrow$ & \textbf{MSE} $\downarrow$ & \textbf{Reg.} $\uparrow$ \\
+& \textbf{(64-96)} & \textbf{(149)} & \textbf{(449)} & \textbf{(\%)} & \textbf{(64-96)} & \textbf{(149)} & \textbf{(449)} & \textbf{(\%)} \\
+\hline
+Sobel                 & 0.152 & 0.124 & 0.144 & 84.92 & 0.151 & 0.124 & 0.138 & 93.64 \\
+Conv 3x3              & 0.065 & 0.060 & 0.128 & 58.74 & 0.068 & 0.060 & 0.070 & 95.75 \\
+Deformable 3x3        & 0.040 & 0.035 & 0.041 & 96.17 & 0.040 & 0.035 & 0.039 & 98.33 \\
+Conv 5x5              & 0.032 & 0.025 & 0.042 & 89.58 & 0.032 & 0.025 & 0.029 & 98.34 \\
+Comb. 3x3+5x5D       & 0.003 & 0.001 & 0.005 & 98.32 & 0.003 & 0.001 & 0.003 & 99.64 \\ 
+\hline
+\end{tabular}
+\end{table}
+
+
+\begin{figure}[htbp] 
+    \centering
+    \begin{subfigure}[b]{0.28\linewidth} 
+        \centering
+        \includegraphics[width=\linewidth]{imgs/emoji_dmg.png}
+        \caption{LPIPS after damage} 
+        \label{fig:emoji_lpips_dmg} 
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.28\linewidth} 
+        \centering
+        \includegraphics[width=\linewidth]{imgs/emoji_mutation2.png}
+        \caption{Adaptation to new target} 
+        \label{fig:emoji_condition_mutate} 
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.42\linewidth} 
+        \centering
+        \includegraphics[width=\linewidth]{imgs/emoji_regen.png}
+        \caption{Regeneration Comparison} 
+        \label{fig:emoji_regen_comparison} 
+    \end{subfigure}
+    \caption{Emoji generation dynamics illustrating adaptation and regeneration robustness. 
+    (a) LPIPS loss progression over timesteps following severe damage (50\% image deletion), tracking perceptual recovery. 
+    (b) Example of NCA adaptation: visualization shows the state transition sequence when the target emoji condition is switched mid-evolution. 
+    (c) Comparison of regeneration quality after 50\% vertical damage for three perception strategies (rows, top to bottom: standard 3x3 Conv, standard 5x5 Conv, and 'Combined' [MultiPerception: 3x3 Conv + 5x5 Dilated Conv D=2]). Each row displays the state just before damage, immediately after damage, and during subsequent regeneration steps. Consistent with the quantitative results in \Cref{tab:emoji_combined}, the Combined perception achieves near-complete visual regeneration, while the 3x3 Conv shows limited recovery, and the 5x5 Conv exhibits intermediate performance.}
+    \label{fig:emoji_results} 
+\end{figure}
+
+\subsubsection{Regeneration Metric} 
+To quantify regeneration performance, we use a unified metric that measures recovery following a perturbation. We define the recovery percentage as:
+\begin{equation}
+    \text{Recovery (\%)} = \frac{m_{\text{final}} - m_{\text{d}}}{m_{\text{pre}} - m_{\text{d}}} \times 100
+    \label{eq:regeneration}
+\end{equation}
+where $m_{\text{pre}}$ is the mean task-specific metric (e.g., MSE loss, classification accuracy) before the perturbation, $m_{\text{d}}$ is the metric immediately after the perturbation is applied, and $m_{\text{final}}$ is the metric at a defined final timestep post-perturbation. This normalization yields 100\% for complete recovery to the pre-perturbation performance level and 0\% for no improvement. Negative values signify further degradation after the initial perturbation.
+
+\noindent\textbf{Results.}
+We trained NCAs using MSE loss with the robust training setup described above, comparing five distinct perception strategies: Sobel filters, standard 3x3 and 5x5 convolutions, deformable 3x3 convolutions, and a 'Combined' strategy using MultiPerception with 3x3 convolution and 5x5 dilated convolution (dilation=2). \Cref{tab:emoji_combined} presents the quantitative results, including MSE loss at different stages of evolution (averaged over timesteps 64-96, at timestep 149, and at timestep 449) and the final regeneration percentages after applying controlled damage and mutation during evaluation. The results indicate that while most perception modules demonstrate robust regeneration capabilities (often >90\% recovery), the more complex Combined perception consistently achieves the lowest MSE throughout evolution and exhibits the highest regeneration scores (98.32\% for damage, 99.64\% for mutation). Notably, simpler perceptions such as Sobel filters resulted in higher steady-state error and weaker damage recovery (84.92\% vs. 98.32\% for Combined). The LPIPS metric in \cref{fig:emoji_lpips_dmg} provides a complementary view on perceptual recovery after damage, while \cref{fig:emoji_condition_mutate} demonstrates successful adaptation when the target condition is mutated. \Cref{fig:emoji_regen_comparison} visualizes the regeneration quality across perception types, confirming the advantage of richer perception architectures for robust multi-class emoji generation and transition.
+
+\subsubsection{Edge-to-Handbag (E2H) Task}
+\noindent\textbf{Prior Work.}
+The integration of NCAs with adversarial training was introduced by \citep{otte2021generativeadversarialneuralcellular}, who demonstrated that NCAs could function as generators within a GAN framework for image synthesis. Their work showed that combining the self-organizing properties of NCAs with adversarial objectives enables the generation of more realistic and diverse images compared to MSE-based training alone. The Edge-to-Handbag (E2H) dataset~\citep{isola2018imagetoimagetranslationconditionaladversarial} provides a challenging conditional image-to-image translation task, where the model must translate sparse edge maps into detailed, textured handbag images. This requires both handling complex conditional inputs and generating intricate visual details—capabilities that benefit from adversarial training objectives.
+
+\noindent\textbf{Our Extension.}
+We apply adversarial training to the E2H task within our modular framework, systematically comparing different perception architectures under this training regime. Specifically, we employ the Wasserstein GAN objective~\citep{arjovsky2017wassersteingan} with Gradient Penalty (WGAN-GP)~\citep{gulrajani2017improvedtrainingwassersteingans} to ensure stable training while effectively approximating the Wasserstein distance between real and generated image distributions. The NCA acts as the generator, evolving from a seed state conditioned on the input edge map to synthesize realistic handbag images, while a critic network is trained concurrently to distinguish real from generated samples.
+
+\noindent\textbf{Results.}
+As illustrated in \cref{fig:e2h_results}, perceptions with broader spatial context yielded superior results even under this adversarial training regime. The loss curves in \cref{fig:e2h_loss}, plotting LPIPS~\citep{zhang2018unreasonableeffectivenessdeepfeatures} over time, clearly show that perceptions with larger receptive fields (Conv 5x5 and Combined) resulted in lower LPIPS loss compared to the standard Conv 3x3, correlating with higher perceptual quality in the generated images. Qualitative examples of the generation process are shown in \cref{fig:e2h_samples}, visualizing the evolution from the initial seed state towards the final handbag image across multiple samples. These results reinforce our findings from other tasks: equipping NCAs with perception modules that capture more global information significantly enhances their performance on complex generation tasks, regardless of whether the objective is direct reconstruction or adversarial training.
+
+\begin{figure}[htbp] 
+    \centering
+    \begin{subfigure}[b]{0.32\linewidth}
+         \centering
+         \includegraphics[width=\linewidth]{imgs/e2h.png}
+         \caption{LPIPS loss over generation} 
+         \label{fig:e2h_loss} 
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.67\linewidth}
+         \centering
+         \includegraphics[width=\linewidth]{imgs/e2h_multi.png}
+         \caption{Generation examples over time} 
+         \label{fig:e2h_samples} 
+    \end{subfigure}
+    \caption{Edge-to-Handbag (E2H) conditional generation results using NCAs under adversarial training. (a) Learned Perceptual Image Patch Similarity (LPIPS) loss during generation for different perception modules (standard 3x3 Conv, wider 5x5 Conv, and Combined [3x3 Conv + 5x5 Dilated Conv D=2]). Lower LPIPS indicates better perceptual quality. (b) Visualization of the generation sequence from initial seed state to final generated handbag images for multiple samples. Last column shows the ground truth target image corresponding to the input edges.}
+    \label{fig:e2h_results} 
+\end{figure}
+
+\subsubsection{Latent Space NCAs}
+
+\noindent\textbf{Prior Work.}
+Recent work by \citep{menta2024latentneuralcellularautomata} introduced latent space NCAs for image restoration and inpainting tasks, demonstrating that NCAs can effectively operate in the compressed representations learned by autoencoders. This methodology builds upon principles common in state-of-the-art generative models such as Stable Diffusion~\citep{rombach2022highresolutionimagesynthesislatent}, which leverage learned latent representations from models like VQVAE~\citep{oord2018neuraldiscreterepresentationlearning} to enable efficient high-resolution generation.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\linewidth]{imgs/latent_nca.png} 
+    \caption{Latent space NCA architecture for high-resolution image generation and inpainting. A pre-trained VQVAE encoder compresses the input/seed state into a compact latent representation. The NCA evolves within this learned latent space through iterative local updates.}
+    \label{fig:latent_nca}
+\end{figure}
+
+\noindent\textbf{Our Extension.}
+We extend latent space NCAs in two directions. First, we apply latent NCAs to \textit{conditional multi-class generation} using both the Emoji and E2H datasets, enabling generation at higher resolutions (512×512 for Emoji, 256×256 for E2H) than practical in pixel space. A pre-trained VQVAE encodes the seed state and target images into compressed latent representations, allowing the NCA to evolve in this lower-dimensional space. The evolved latent state is decoded back to pixel space, and losses are computed in the pixel domain to train the NCA. Second, we explore latent NCAs for \textit{high-resolution image inpainting} on CelebA~\citep{liu2015faceattributes} using a two-stage protocol: first training a VQVAE on both perturbed (with random circular patches removed) and complete images to learn a robust latent manifold, then training the NCA entirely in latent space to evolve masked latent encodings toward their complete counterparts through context-aware regeneration.
+
+\noindent\textbf{Results.}
+For conditional generation (\cref{fig:latent_ca_generation}), latent space NCAs successfully synthesized high-resolution images for both Emoji and E2H tasks, achieving faster growth with substantially less computation compared to pixel-space models due to their compact representation. Unlike traditional pixel-space cellular automata, which require simulation steps proportional to image dimensions, latent space evolution enables efficient scaling to higher resolutions. For the CelebA inpainting task (\cref{fig:celeba}), the latent NCA demonstrated effective context-aware regeneration, progressively reconstructing missing facial features over evolution steps by leveraging local communication in the learned latent manifold. These results demonstrate that latent space NCAs can successfully handle both conditional generation and restoration tasks at higher resolutions while maintaining computational efficiency.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}[b]{0.45\linewidth}
+         \centering
+         \includegraphics[width=\linewidth]{imgs/emoji_latent_training.png}
+         \caption{Emoji generation at 512×512}
+         \label{fig:latent_emoji_samples}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.45\linewidth}
+         \centering
+         \includegraphics[width=\linewidth]{imgs/e2h_latent_training.png}
+         \caption{E2H generation at 256×256}
+         \label{fig:latent_e2h_samples}
+    \end{subfigure}
+    \caption{Latent space NCA generation for conditional image synthesis. The NCA evolves in the compressed latent space of a pre-trained VQVAE, enabling efficient high-resolution generation for both (a) multi-class emoji generation and (b) edge-to-handbag translation.}
+    \label{fig:latent_ca_generation}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\linewidth]{imgs/latent_celeba_regeneration.png}
+    \caption{Latent NCA regeneration on CelebA inpainting. The sequence shows the evolution of the latent state decoded to pixel space at intermediate steps. Starting from the masked image's latent representation (top), the NCA progressively regenerates missing facial features through local communication in latent space.}
+    \label{fig:celeba}
+\end{figure}
+
+
+% TEXTURE GEN
+\subsection{Texture Generation}
+\label{sec:texture}
+\noindent\textbf{Prior Work.}
+\citep{niklasson2021self-organising} demonstrated that NCAs can learn to generate and self-organize complex textures by training on style-based loss functions. Their approach used VGG-based Gram matrix losses to capture texture statistics from the Oxford Describable Textures Dataset (DTD)~\citep{cimpoi14describing}, enabling NCAs to produce dynamic, temporally consistent textures that emerge from fixed initial states. This work established that NCAs could move beyond simple pattern replication to synthesize rich textural patterns through self-organization, with the texture characteristics encoded in the learned update rules rather than explicitly in the initial state.
+
+\noindent\textbf{Our Extension.}
+We apply the texture synthesis approach to systematically evaluate how different perception modules affect both texture generation quality and regeneration robustness. We train NCAs on a 168×168 grid using the DTD dataset with a composite loss function comprising VGG-based style loss (computed from Gram matrices of intermediate feature activations) and an overflow loss for regularization (penalizing RGB values outside [0,1] and hidden channels outside [-1,1]). Training employs the Sample Pool mechanism (\cref{c:sp}) with evolution windows of 32-54 steps per iteration to improve stability. We compare two perception strategies: standard 3×3 convolutional perception and an enhanced 'Combined' strategy using MultiPerception (3×3 Conv + 5×5 Dilated Conv D=2) to provide a broader receptive field. Critically, we assess not just generation quality but also robustness through regeneration experiments, applying significant perturbations (50\% horizontal or vertical removal) after 150 evolution steps to test self-repair capabilities.
+
+\begin{figure}[htbp] 
+\centering
+\begin{subfigure}[b]{0.30\linewidth} 
+    \centering
+    \includegraphics[width=\linewidth]{imgs/ot_vgg_dmg.png}
+    \caption{VGG Style loss} 
+    \label{fig:ot_loss_curve} 
+\end{subfigure}%
+\hfill
+\begin{subfigure}[b]{0.68\linewidth} 
+    \centering
+    \includegraphics[width=\linewidth]{imgs/ot_regen.png} 
+    \caption{Visual comparison and regeneration} 
+    \label{fig:ot_visual_comparison}
+\end{subfigure}
+\caption{NCA texture generation and regeneration dynamics for the 'lacelike' DTD texture. 
+(a) VGG Style loss progression over evolution steps, showing recovery after 50\% horizontal removal at t=150. 
+(b) Visual comparison including the target texture and generated results. It illustrates the state before perturbation, immediately after, and the final regenerated states for models using standard ('Conv 3x3') versus enhanced ('Combined' [MultiPerception: 3x3 Conv + 5x5 Dilated D=2]) perception. Note how the Combined perception more accurately reproduces both fine local details and larger structural patterns compared to the simpler Conv 3x3 perception, both in the initial generation and during regeneration.}
+\label{fig:ot}
+\end{figure}
+
+\begin{wrapfigure}{r}{0.6\textwidth}
+%\vspace{-1.5cm}
+%   \begin{minipage}{0.5\textwidth}
+    \centering
+        \includegraphics[scale=0.4]{imgs/classification_nca.png} 
+%    \end{minipage}
+    \caption{Self-classifying NCA architecture. The cell state is partitioned into fixed input channels (containing the image to classify), hidden channels for computation, and evolving classification channels (one per class). Through iterative local updates, classification values propagate and converge across all spatial locations. The final prediction is obtained by spatially averaging each class channel and selecting the maximum.}
+\label{fig:classification_nca}
+%\vspace{-0.5cm}
+\end{wrapfigure}
+
+\noindent\textbf{Results.}
+The enhanced 'Combined' perception strategy substantially improved the visual quality of generated textures, particularly evident in patterns requiring broader spatial context such as the 'lacelike' texture shown in \cref{fig:ot_visual_comparison}. This texture was chosen for detailed analysis as its structure contains both fine-grained local details and complex larger arrangements, providing a suitable test case for evaluating perception capabilities. Quantitative evaluation using the regeneration metric (\cref{eq:regeneration}) confirmed the visual superiority: the Combined perception achieved significantly higher recovery (99.88\%) compared to standard 3×3 convolution (96.38\%). As shown in \cref{fig:ot_loss_curve}, the VGG style loss progression demonstrates that the Combined perception recovers more effectively after damage. These results suggest that broader receptive fields contribute to both better initial texture generation and more effective self-repair capabilities in texture synthesis tasks.
+
+%CLASSIFICATION
+\subsection{Classification (MNIST, CIFAR10)}
+\label{sec:classification}
+
+\noindent\textbf{Prior Work.}
+\citep{randazzo2020self-classifying} introduced self-classifying NCAs for MNIST digit recognition, demonstrating that NCAs could perform classification by evolving class predictions over time through local interactions. In their approach, the NCA states include fixed input channels containing the image and evolving classification channels (one for each class). Through iterative updates based on pixel-wise losses (MSE or Cross-Entropy), these classification channels converge to represent the correct class, with the final prediction derived by spatially averaging the class channels and selecting the maximum as visualized in \cref{fig:classification_nca}.
+
+\noindent\textbf{Our Extension.}
+While we validate the MNIST self-classification approach within our framework, our key contribution is extending the self-classification paradigm to the significantly more challenging \textit{CIFAR-10 dataset}. CIFAR-10 presents much higher visual complexity (airplanes, trucks, animals, etc.) with color images and greater intra-class variability compared to grayscale MNIST digits. For CIFAR-10, we systematically evaluate how different architectural choices affect classification performance: (i) standard 3×3 convolutional perception, (ii) 3×3 convolution with Sample Pooling (SP) for long-term stability, and (iii) an enhanced perception with residual connections and a wider receptive field (3×3 Conv + 5×5 Dilated Conv D=2). 
+
+% --- MNIST Subsection ---
+\subsubsection{MNIST Self-Classification}
+
+\noindent\textbf{Validation Results.}
+We first validate the self-classification approach on MNIST using a standard 3×3 convolutional perception module. We compare MSE and Pixel-wise Cross-Entropy (PCE) losses applied to these classification channels, with targets being one-hot encoded spatial representations (target=1 in the true class channel at all locations, 0 otherwise).
+
+\begin{figure}[h]
+\centering
+\begin{subfigure}[b]{0.4\linewidth}
+\centering
+\includegraphics[width=\linewidth]{imgs/mnist_acc_mutate.png}
+\caption{Per-pixel accuracy over time} 
+\label{fig:mnist_acc_curve} 
+\end{subfigure}%
+\hfill
+\begin{subfigure}[b]{0.6\linewidth}
+\centering
+\includegraphics[width=\linewidth]{imgs/mnist_pred.png}
+\caption{Evolving class channels adapting to input mutation}
+\label{fig:mnist_vis_pred}
+\end{subfigure}
+
+\caption{MNIST self-classification and adaptation dynamics. (a) Per-pixel classification accuracy over evolution steps, showing the effect of mutating the input digit at t=150. (b) Visualization showing the input digit (fixed) and the state of the 10 evolving classification channels before and after the input mutation.}
+\label{fig:mnist} 
+\end{figure}
+
+\Cref{tab:mnist_metrics} summarizes the classification accuracy, showing high performance during stable evolution (e.g., steps 20-30) for both MSE (94.6\%) and PCE (95.3\%) losses. To test adaptation, the input digit (held in the fixed channel) was mutated to a different digit after 150 steps. The table shows accuracy just before mutation (step 149) and long after (step 449), demonstrating the network's ability to dynamically adapt its pixel-wise predictions to the new input digit. The "Regeneration" column quantifies this adaptation capability by measuring the recovery of per-pixel accuracy relative to the pre-mutation level after the input change; both loss functions enable strong adaptation (99.31\% for MSE, 98.46\% for PCE). \Cref{fig:mnist} provides further illustration: \cref{fig:mnist_acc_curve} plots the per-pixel accuracy over time, including the dip and recovery following the mutation event at t=150, while \cref{fig:mnist_vis_pred} shows a visual example of the evolving classification channels adapting to the changed input digit.
+
+\begin{table}[h]
+\centering
+\caption{Mean Per-Pixel Accuracy and Adaptation Recovery on MNIST. Columns show average accuracy during stable evolution (20-30 steps), just before input mutation (step 149), long after mutation (step 449), and the calculated adaptation recovery (\%).}
+\label{tab:mnist_metrics}
+\begin{tabular}{lcccc}
+\hline
+\textbf{Loss Fn.} & \textbf{Acc. (20-30)} & \textbf{Acc. (149)} & \textbf{Acc. (449)} & \textbf{Adapt. Recov. (\%)} \\ % 
+\hline
+MSE & 94.6\% & 97.0\% & 96.4\% & 99.31 \\ 
+PCE & 95.3\% & 97.8\% & 96.4\% & 98.46 \\ 
+\hline
+\end{tabular}
+\end{table}
+
+% --- CIFAR10 Subsection ---
+\subsubsection{CIFAR10 Classification}
+
+Extending to CIFAR-10 addresses a significantly higher visual complexity with color images. The NCA state includes the fixed 3-channel RGB input, hidden channels, and 10 evolving classification channels trained with MSE loss on one-hot spatial targets. We evaluate three configurations: (i) standard 3×3 convolution, (ii) 3×3 with Sample Pooling (SP), and (iii) enhanced perception (Residual + 5×5 Dilated Conv D=2).
+
+\begin{table}[h]
+\centering
+\caption{Mean Image Classification Accuracy on CIFAR10. Columns show average accuracy during the training window (32-64 steps) and accuracy at a later timestep (step 300).}
+\label{tab:cifar10}
+\begin{tabular}{lcc}
+\hline
+\textbf{Perception Strategy} & \textbf{Acc. (32-64)} & \textbf{Acc. (300)} \\ 
+\hline
+Conv 3x3                 & 43.83\% &  8.14\% \\
+Conv 3x3 + SP            & 41.11\% & 46.13\% \\ 
+Residual + Dilated 5x5 Conv & 72.98\% & 54.37\% \\
+\hline
+\end{tabular}
+\end{table}
+
+As shown in \cref{tab:cifar10,fig:cifar10}, the enhanced perception dramatically improved performance, achieving 72.98\% accuracy (steps 32-64) versus 43.83\% for standard 3×3 convolution. Sample Pooling proved critical for long-term stability: without SP, accuracy collapsed to 8.14\% by step 300, while with SP, it maintained 46.13\%. The enhanced perception also showed better stability (54.37\% at step 300). These results demonstrate that self-classifying NCAs successfully extend to complex natural image datasets beyond MNIST, with architectural improvements (wider receptive fields, residual connections) and training mechanisms (SP) proving equally beneficial for classification as well as for generation tasks.
+
+\begin{figure}[h]
+\centering
+\begin{subfigure}[b]{0.55\linewidth}
+\centering
+\includegraphics[width=\linewidth]{imgs/cifar10_acc.png}
+\caption{Image accuracy over time}
+\label{fig:cifar10_acc_curve} 
+\end{subfigure}%
+\hfill
+\begin{subfigure}[b]{0.45\linewidth}
+\centering
+\includegraphics[width=\linewidth]{imgs/cifar10.png}
+\caption{Classification example}
+\label{fig:cifar10_vis_pred} 
+\end{subfigure}
+\caption{CIFAR10 classification performance. (a) Image classification accuracy over evolution steps for three perception strategies: Conv 3x3, Conv 3x3 with Sample Pooling (SP), and Residual + Dilated 5x5 Conv. (b) Visual examples showing the input RGB image, hidden channels, and classification channels (bottom row) for one sample.}
+\vspace{-0.5cm}
+\label{fig:cifar10} 
+\end{figure}
+
+%VIDEO
+\subsection{Video Transition (MovingMNIST)} \label{sec:video_transition}
+
+\noindent\textbf{Prior Work.}
+While NCAs have been successfully applied to static pattern generation, texture synthesis, and classification, their application to temporal sequence prediction and video dynamics has remained relatively unexplored. Video prediction tasks require learning not just spatial patterns but also temporal transition rules that govern how patterns evolve over time. The MovingMNIST dataset~\cite{srivastava2016unsupervisedlearningvideorepresentations} provides a controlled testbed for video prediction, where digits move with constant velocity and bounce off boundaries, requiring models to learn both spatial and temporal coherence.
+
+\begin{wrapfigure}{r}{0.5\textwidth}
+%\vspace{-1.5cm}
+%   \begin{minipage}{0.5\textwidth}
+    \centering
+        \includegraphics[scale=0.4]{imgs/moving_nca.png} 
+%    \end{minipage}
+    \caption{Video prediction NCA architecture for MovingMNIST. The cell state is initialized with $k$ consecutive video frames encoded in the first $k$ channels, with remaining hidden channels set to zero. The NCA evolves this temporal state representation over multiple steps to predict the next $k$ frames (the input sequence shifted forward by one timestep).}
+\label{fig:movingNCA}
+%\vspace{-0.5cm}
+\end{wrapfigure}
+
+
+\noindent\textbf{Our Extension.}
+We introduce a novel application of NCAs to video frame prediction, framing it as a state-to-state transition problem. The NCA's grid state is initialized with a sequence of $k$ consecutive frames from a Moving MNIST video, encoded into the first $k$ channels of the state tensor, while the remaining hidden channels are initialized to zero. The NCA evolves this initial state over multiple steps, with the training objective being to match the next sequence of $k$ frames (i.e., the original sequence shifted forward by one timestep) using MSE loss. Critically, we employ the Sample Pool mechanism (\cref{c:sample_pool}), where the model's own predictions are recycled as initial states for subsequent training iterations, encouraging the learning of self-stabilizing and temporally coherent dynamics.
+
+\noindent\textbf{Results.}
+As shown in \cref{fig:video_transition}, NCAs successfully learn temporal transition dynamics for video prediction. The MSE loss curves (\cref{fig:moving_mnist_loss}) demonstrate that the NCA state converges as it evolves from input frames toward target frames during each transition step. Visual examples (\cref{fig:moving_mnist_samples}) illustrate the iterative prediction process across the frame sequence. These results establish video prediction as a possible application domain for NCAs, extending their utility beyond static pattern generation to temporal sequence modeling.
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}[b]{0.40\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{imgs/moving_mnist_loss.png}
+    \caption{MSE loss per evolution step}
+    \label{fig:moving_mnist_loss}
+\end{subfigure}%
+\hfill
+\begin{subfigure}[b]{0.58\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{imgs/moving_mnist.png}
+    \caption{Frame prediction sequence}
+    \label{fig:moving_mnist_samples}
+\end{subfigure}
+\caption{MovingMNIST video prediction with NCAs. (a) MSE loss over NCA evolution steps for each frame-to-frame transition, showing how the NCA state evolves from the initial frames (state $t$) toward the target frames (state $t+1$), until $t=14$. (b) Visual examples of the prediction sequence: starting from input frames, the NCA iteratively evolves its state to predict the next frames in the video, demonstrating learned temporal transition dynamics.}
+\label{fig:video_transition}
+\end{figure} 
+
+
+\section{Discussion}
+
+
+
+\bibliography{main}
+\bibliographystyle{tmlr}
+
+\appendix
+\section{Appendix}
+
+\subsection{Related Work TODO}
+\label{app:related_work}
+
+MedSegDiffNCA~\cite{mittal2025medsegdiffncadiffusionmodelsneural}.
+
+
+\subsection{Sample Pooling Impact}
+\label{c:sample_pool}
+To empirically validate the critical role of Sample Pooling in our framework, we conducted an ablation study comparing training with and without SP using a standard 3x3 convolutional perception module. As detailed in \cref{tab:sp_regen} and visualized in \cref{fig:sp_plots}, the inclusion of SP drastically improves regeneration capabilities following perturbations. Without SP, the system failed to recover effectively, resulting in large negative regeneration scores (-196.18\% for damage, -125.05\% for mutation), indicative of significant degradation post-perturbation. With SP, the NCAs demonstrated a strong positive recovery (58.74\% for damage, 95.75\% for mutation), confirming the significant contribution of SP to the robustness of generative NCAs in this setup. These results motivate our use of SP in all subsequent generative experiments.
+
+\begin{table}[htbp]
+\centering
+\caption{Impact of Sample Pooling (SP) on Regeneration Performance for Emoji Generation, using a 3x3 Convolutional Perception module.}
+\label{tab:sp_regen}
+\begin{tabular}{lcc}
+\hline
+\textbf{Training Setup} & \textbf{Damage Regen. (\%)} & \textbf{Mutation Regen. (\%)} \\ \hline
+Without SP & -196.18 & -125.05 \\
+With SP    &   58.74 &   95.75 \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}[b]{0.49\linewidth}
+         \centering
+         \includegraphics[width=\linewidth]{imgs/sp_dmg.png}
+         \caption{Recovery after Damage}
+         \label{fig:sp_plots1}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.49\linewidth}
+         \centering
+         \includegraphics[width=\linewidth]{imgs/sp_mutation.png}
+         \caption{Recovery after Mutation}
+         \label{fig:sp_plots2}
+    \end{subfigure}
+    \caption{Comparison of recovery dynamics (e.g., loss curves over time post-perturbation) with and without Sample Pooling (SP) for the Emoji generation task using a 3x3 Conv perception. Demonstrates SP's positive impact on stability.}
+    \label{fig:sp_plots}
+\end{figure}
+
+
+\subsection{Growing MNIST}
+
+\noindent\textbf{Our Extension.}
+We also apply this growing paradigm to the MNIST digit generation task, a dataset not explored in the original work, to investigate how different loss functions affect the generative diversity and visual style of the produced patterns. Using a uniform 3x3 convolutional perception module across all experiments, we isolate the effect of the training objective. The NCA autonomously grows complete digits from a single seed pixel, whose color encodes the target digit class (e.g., green for digit 8), without no explicit global condition channels. We systematically compare four loss configurations: MSE, L1 loss, L1 combined with an adversarial critic, and L1 + Critic with Classifier-Free Guidance (CFG)~\citep{ho2022classifierfreediffusionguidance}. Our focus is on understanding whether and how adversarial objectives and guidance mechanisms can introduce controlled stochasticity and visual variation in the generated outputs, beyond the deterministic reconstruction achieved by MSE or L1 alone.
+
+\noindent\textbf{Results.}
+Quantitatively, all approaches successfully generate recognizable digits: a pre-trained MNIST classifier achieved 100\% accuracy on images produced by NCAs trained with all tested loss functions. However, the qualitative results, visualized in \cref{fig:mnist_loss_comparison}, reveal significant differences in generative diversity. Models trained with MSE produce highly deterministic and nearly identical digits across multiple generation runs. In contrast, incorporating an adversarial critic introduces noticeable stylistic variation, and adding CFG leads to substantially greater diversity in digit appearance, as reflected in the pixel variance heatmaps. These findings demonstrate that, while the growing NCA paradigm generalizes well to new datasets like MNIST, the choice of loss function serves as a critical lever to control the trade-off between reconstruction fidelity and generative diversity in NCA-based pattern formation.
+
+\begin{figure}[htbp]
+    \centering
+    % --- Top Row ---
+    \begin{subfigure}[b]{0.49\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{imgs/mse.png}
+        \caption{MSE Loss}
+        \label{fig:mnist_mse}
+    \end{subfigure}
+    \hfill % Pushes the next subfigure to the right
+    \begin{subfigure}[b]{0.49\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{imgs/l1.png}
+        \caption{L1 Loss}
+        \label{fig:mnist_l1}
+    \end{subfigure}
+
+    \vspace{1em} % Adds some vertical space between the rows
+
+    % --- Bottom Row ---
+    \begin{subfigure}[b]{0.49\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{imgs/l1_adv.png}
+        \caption{L1 + Adversarial Loss}
+        \label{fig:mnist_l1_adv}
+    \end{subfigure}
+    \hfill % Pushes the next subfigure to the right
+    \begin{subfigure}[b]{0.49\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{imgs/l1_adv_critic.png}
+        \caption{L1 + Adversarial + CFG}
+        \label{fig:mnist_l1_adv_cfg}
+    \end{subfigure}
+
+    \caption{Comparison of generative diversity on the growing MNIST task under different loss functions. Each subfigure shows the results for a specific loss: (a) MSE, (b) L1, (c) L1 + Adversarial, and (d) L1 + Adversarial + CFG. Each panel displays the initial seed, nine different generated samples, and a heatmap of pixel variance over the samples.}
+    \label{fig:mnist_loss_comparison}
+\end{figure}
+
+
+\end{document}
