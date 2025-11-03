@@ -1,7 +1,7 @@
 <div align="center">
   <img src="figures/nca_torch_logo.png" alt="NCA-torch Logo" width="400"/>
 
-  <h1>NCA-torch</h1>
+  <h1>NCAtorch</h1>
 
   <p>
     <em>A comprehensive PyTorch-based framework for Neural Cellular Automata research and applications</em>
