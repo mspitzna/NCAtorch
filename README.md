@@ -1,13 +1,12 @@
 <div align="center">
   <img src="figures/nca_torch_logo.png" alt="NCA-torch Logo" width="400"/>
-
-  <h1>NCA-torch</h1>
-
   <p>
     <em>A comprehensive PyTorch-based framework for Neural Cellular Automata research and applications</em>
   </p>
 
-  [📚 Documentation](#documentation) | [🚀 Quick Start](#quick-start) | [💡 Examples](#examples) | [🎨 Demo](#interactive-visualization)
+  <p>
+    📄 Paper (Coming Soon) &nbsp&nbsp | &nbsp&nbsp 📚 <a href="#-documentation">Documentation</a> &nbsp&nbsp | &nbsp&nbsp 🚀 <a href="#-quick-start">Quick Start</a> &nbsp&nbsp | &nbsp&nbsp 🎨 <a href="#interactive-visualization">Demo</a>
+  </p>
 
   ---
 </div>
@@ -65,7 +64,7 @@ python train_scripts/train_ca.py --config config/emoji_config.yaml --device cuda
 
 💡 **Tip**: Start with the emoji generation task for quick results and visual feedback!
 
-### Interactive Visualization
+## 🎨 Interactive Visualization
 
 Launch the web interface to interact with trained models:
 
@@ -74,6 +73,7 @@ uvicorn app.fastapi_backend:app --reload
 ```
 
 Then open your browser to `http://localhost:8000`
+
 
 ## ⚙️ Configuration
 
