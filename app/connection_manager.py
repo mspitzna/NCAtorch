@@ -33,7 +33,7 @@ class ConnectionManager:
 
         with io.BytesIO() as buffered:
             # Adjust quality based on image size for faster encoding
-            quality = 75 if h > max_size or w > max_size else 85
+            quality = 75 if h > max_size or w > max_size else 100
             image_pil.save(buffered, format="JPEG", quality=quality, optimize=False)
             img_bytes = buffered.getvalue()
         await self.broadcast_binary(img_bytes)

@@ -149,17 +149,22 @@ async def apply_ca_changes():
             x_tensor_gpu, x_latent_gpu = ca_handler.forward(
                 x_tensor, state_handler.get_condition_tensor()
             )
-            # Move back to CPU for display only when broadcasting
-            x_latent_cpu = x_latent_gpu.cpu()
-            state_handler.set_img_tensor(x_latent_cpu)
+            # For latent training, store the latent for next iteration
+            # but keep the decoded tensor for display
+            if state_handler.get_config().LATENT_TRAINING.ENABLED:
+                x_latent_cpu = x_latent_gpu.cpu()
+                state_handler.set_img_tensor(x_latent_cpu)
+                x_display_cpu = x_tensor_gpu.cpu()
+            else:
+                x_display_cpu = x_tensor_gpu.cpu()
+                state_handler.set_img_tensor(x_display_cpu)
 
         # Only broadcast every Nth frame to reduce network overhead
         frame_counter += 1
         if frame_counter >= broadcast_interval:
             # Only convert to image when we're actually broadcasting
             with state_handler.get_lock():
-                x_tensor_cpu = state_handler.get_img_tensor()
-                img = convert_to_img(x_tensor_cpu)
+                img = convert_to_img(x_display_cpu)
                 state_handler.set_img_canvas(img)
             await manager.broadcast_image(state_handler.get_img_canvas())
             frame_counter = 0
