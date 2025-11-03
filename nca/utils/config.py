@@ -7,7 +7,6 @@ class PerceptionConfig(BaseModel):
     MODE: str = "conv"
     KERNEL_SIZE: int = 3
     DILATION: int = 1
-    NUM_HEADS: int = 4
     @field_validator("MODE")
     @classmethod
     def check_mode(cls, value):
@@ -25,16 +24,10 @@ class ModelConfig(BaseModel):
     USE_POSITIONAL_EMBEDDINGS: bool = False
     LIVING_MASK: bool = False
     LIVING_MASK_INDEX: int = 3
-    NOISE_INJECTION: float = 0.0
+    NOISE_INJECTION: float = 0.0 # not used currently
     FINAL_ACTIVATION: bool = False
     NORMALIZE_OUTPUT: bool = False
     FIRE_RATE: float = 0.5
-
-    USE_SKIP_CONNECTIONS: bool = False
-    USE_NORM: bool = False
-    NORM_TYPE: str = "batch"
-    USE_DROPOUT: bool = False
-    DROPOUT_PROB: float = 0.0
 
     RESNET_BLOCKS: int = 2
 
@@ -90,9 +83,6 @@ class TrainingConfig(BaseModel):
     GRADIENT_CHECKPOINT_SEGMENTS: int = 16
     GRADIENT_ACCUMULATION_STEPS: int = 1
     MIXED_PRECISION: bool = False
-    SEED_WEIGHT: float = 10.0
-    BACKWARD_SEED_WEIGHT: float = None
-    SEED_RADIUS: int = 3
 
     @field_validator("LOSS_FN")
     @classmethod
@@ -135,21 +125,7 @@ class TrainingConfig(BaseModel):
                         f"INTERMEDIATE_LOGGING_STEPS contains {step}, but it must be less than ITER_N_MIN ({iter_n_min})."
                     )
         return value
-
-    @field_validator("SEED_WEIGHT", "BACKWARD_SEED_WEIGHT")
-    @classmethod
-    def check_seed_weights(cls, value):
-        if value is not None and value <= 0:
-            raise ValueError("Seed weights must be positive.")
-        return value
-
-    @field_validator("SEED_RADIUS")
-    @classmethod
-    def check_seed_radius(cls, value):
-        if value <= 0:
-            raise ValueError("SEED_RADIUS must be positive.")
-        return value
-
+    
     @field_validator("GRADIENT_CHECKPOINT_SEGMENTS")
     @classmethod
     def check_checkpoint_segments(cls, value):
@@ -226,6 +202,7 @@ class SamplePoolConfig(BaseModel):
 
 class LatentConfig(BaseModel):
     ENABLED: bool = False
+    ENCODER_TYPE: str = "AE"
     LATENT_AE_STEPS: int = 10000
     LATENT_AE_WARMUP_STEPS: int = 2000
     LATENT_AE_LR: float = 0.001
@@ -236,7 +213,6 @@ class LatentConfig(BaseModel):
     LATENT_AE_LOG_INTERVAL: int = 2500
     LATENT_AE_SAVE_INTERVAL: int = 5000
     APPLY_DAMAGE: bool = False
-    ENCODER_TYPE: str = "AE"
     AE_CHECKPOINT: Path = None
     VAE_KL_BETA: float = 1.0
     VAE_BASE_CHANNELS: int = 64
