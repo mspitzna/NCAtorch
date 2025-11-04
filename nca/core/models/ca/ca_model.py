@@ -21,7 +21,7 @@ class CAModel(nn.Module, ABC):
         living_mask=False,
         living_mask_indice=3,
         noise_injection=0.0,
-        normalize_output=False,
+        clamp_output=False,
         **kwargs,
     ):
         super().__init__()
@@ -34,7 +34,7 @@ class CAModel(nn.Module, ABC):
         self.living_mask = living_mask
         self.living_mask_indice = living_mask_indice
         self.noise_injection = noise_injection
-        self.normalize_output = normalize_output
+        self.clamp_output = clamp_output
 
         # Learnable Positional Embeddings
         if self.use_positional_embeddings:
@@ -72,7 +72,7 @@ class CAModel(nn.Module, ABC):
         print(f"Update model has {num_dmodel_params:,} learnable parameters")
 
     def _init_weights(self):
-        # Find the last Conv2d layer and reinitialize it to near zero weights
+        # Find the last Conv2d layer and reinitialize it with small random weights
         last_conv = None
         for _, module in self.update_model.named_modules():
             if isinstance(module, nn.Conv2d):
@@ -80,10 +80,10 @@ class CAModel(nn.Module, ABC):
 
         if last_conv is not None:
             print(f"Re-initializing last convolutional layer: {last_conv}")
-            # Initialize weights close to zero to stabilize early training updates.
-            torch.nn.init.zeros_(last_conv.weight)
+            # Initialize with small random weights so the first updates have non-zero variance.
+            torch.nn.init.normal_(last_conv.weight, mean=0.0, std=1e-3)
             if last_conv.bias is not None:
-                torch.nn.init.zeros_(last_conv.bias)
+                torch.nn.init.normal_(last_conv.bias, mean=0.0, std=1e-3)
 
     def _call_update_model(self, x, current_state=None):
         """
@@ -197,9 +197,9 @@ class CAModel(nn.Module, ABC):
 
             state = state * life_mask.float()  # Apply the living mask to the update
 
-        # 8) Normalize each batch item
-        if self.normalize_output:
-            state = state / (state.std(dim=(1, 2, 3), keepdim=True) + 1e-6)
+        # 8) Clamp each batch item to keep states within reasonable bounds
+        if self.clamp_output:
+            state = torch.clamp(state, min=0.0, max=1.0)
 
         if freeze_channels is not None:
             state = torch.cat([frozen_layers, state], dim=1)

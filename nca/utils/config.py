@@ -26,7 +26,7 @@ class ModelConfig(BaseModel):
     LIVING_MASK_INDEX: int = 3
     NOISE_INJECTION: float = 0.0 # not used currently
     FINAL_ACTIVATION: bool = False
-    NORMALIZE_OUTPUT: bool = False
+    CLAMP_OUTPUT: bool = False
     FIRE_RATE: float = 0.5
 
     RESNET_BLOCKS: int = 2
@@ -46,7 +46,7 @@ class ModelConfig(BaseModel):
         if not (0 <= value <= 1):
             raise ValueError("NOISE_INJECTION must be between 0 and 1.")
         return value
-        
+
     @field_validator("NAME")
     @classmethod
     def check_model_name(cls, value):

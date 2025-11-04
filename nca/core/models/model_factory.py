@@ -58,7 +58,7 @@ def create_model(config: Config, cond_dim, img_height, img_width):
         update_model_module=update_model,
         noise_injection=noise_injection,
         fire_rate=fire_rate,
-        normalize_output=config.MODEL.NORMALIZE_OUTPUT,
+        clamp_output=config.MODEL.CLAMP_OUTPUT,
     )
     
     # Move to device once after full construction
@@ -230,4 +230,3 @@ def get_latent_encoder(config: Config, device):
         return model, ae_criterion, None
     else:
         raise ValueError(f"Unknown LATENT_TRAINING.MODEL_TYPE: {model_type}")
-

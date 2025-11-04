@@ -1,49 +1,50 @@
-PROJECT_NAME: "ot_swirly"                 # Name of the project
-TRAIN_NAME: "ot_swirly_attention3x3"              # Name of the training run
-SEED: 42                                  # Random seed
+PROJECT_NAME: "ot_ziggzagged"                 # Name of the project
+TRAIN_NAME: "ot_ziggzagged_3x3"              # Name of the training run
+SEED: 41                                  # Random seed
 DEVICE: "cuda"                             # Device to use for training
-WANDB: true                               # Flag to enable logging to Weights & Biases
+WANDB: false                               # Flag to enable logging to Weights & Biases
 
 MODEL:
   NAME: "ConvCA"
-  HIDDEN_CHANNELS: [128]
-  CHANNEL_N: 24
-  USE_POSITIONAL_EMBEDDINGS: False
+  HIDDEN_CHANNELS: [80]
+  CHANNEL_N: 16
   LIVING_MASK: false
-  NORMALIZE_OUTPUT: true
-  FINAL_ACTIVATION: false
+  CLAMP_OUTPUT: true
   PERCEPTIONS:
-    - MODE: "attention"
+    - MODE: "conv"
+      KERNEL_SIZE: 3
+    - MODE: "deformable_conv"
       KERNEL_SIZE: 3
 
 
 TRAINING:
-  BATCH_SIZE: 3
+  BATCH_SIZE: 12
   STEPS: 50000
-  LEARNING_RATE: 0.002
+  LEARNING_RATE: 0.0005
   LR_SCHEDULE_MODE: "cosine"
   LOSS_FN: "vggstyle"
-  WARMUP_STEPS: 2500
+  WARMUP_STEPS: 10000
   OVERFLOW_LOSS: true
   GAMMA: 0.1
   LOG_INTERVAL: 500
-  SAVE_INTERVAL: 25000
+  SAVE_INTERVAL: 50000
   ITER_N_MIN: 12
   ITER_N_MAX: 22
+  MIXED_PRECISION: true
   INTERMEDIATE_LOGGING_STEPS: [5, 10]
   GRADIENT_CLIPPING_NORM: 1.0
-  GRADIENT_CHECKPOINTING: true
+  GRADIENT_CHECKPOINTING: false
   GRADIENT_CHECKPOINT_SEGMENTS: 10
-  GRADIENT_ACCUMULATION_STEPS: 3
+  GRADIENT_ACCUMULATION_STEPS: 1
 
 DATASET:
-  NAME: "ot"                            # Name of the dataset [emoji, e2h, mnist]
-  DATASET_SAMPLE_PATH: "/home/mspitzna/nca-torch/datasets/dtd-r1.0.1/dtd/images/swirly/swirly_0066.jpg"
-  TARGET_SIZE: 168
+  NAME: "ot"                           
+  DATASET_SAMPLE_PATH: "./datasets/dtd-r1.0.1/dtd/images/zigzagged/zigzagged_0031.jpg" # mandatory for 'ot' dataset
+  TARGET_SIZE: 98
 
 PATTERN_POOL:
   ENABLED: true
-  POOL_SIZE: 1024
+  POOL_SIZE: 256
   POOL_DELAY: 1
   POOL_START_RATIO: 0.5
   POOL_END_RATIO: 0.5
