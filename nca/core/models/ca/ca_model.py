@@ -80,10 +80,10 @@ class CAModel(nn.Module, ABC):
 
         if last_conv is not None:
             print(f"Re-initializing last convolutional layer: {last_conv}")
-            # Initialize weights to a uniform distribution around 0 with a small range.
+            # Initialize weights close to zero to stabilize early training updates.
             torch.nn.init.zeros_(last_conv.weight)
             if last_conv.bias is not None:
-                torch.nn.init.xavier_uniform_(last_conv.weight, gain=0.1)
+                torch.nn.init.zeros_(last_conv.bias)
 
     def _call_update_model(self, x, current_state=None):
         """

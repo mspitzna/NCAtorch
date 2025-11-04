@@ -1,8 +1,8 @@
 PROJECT_NAME: "emoji"                 # Name of the project
-TRAIN_NAME: "emoji_residual_3x3"              # Name of the training run
+TRAIN_NAME: "emoji_deletee"              # Name of the training run
 SEED: 42                                  # Random seed
 DEVICE: "cuda"                             # Device to use for training
-WANDB: true                               # Flag to enable logging to Weights & Biases
+WANDB: false                               # Flag to enable logging to Weights & Biases
 
 MODEL:
   NAME: "ConvCA"
@@ -14,8 +14,6 @@ MODEL:
   FINAL_ACTIVATION: false
   PERCEPTIONS:
     - MODE: "conv"
-      KERNEL_SIZE: 3
-    - MODE: "residual_conv"
       KERNEL_SIZE: 3
 
 
@@ -32,6 +30,7 @@ TRAINING:
   SAVE_INTERVAL: 25000
   ITER_N_MIN: 48
   ITER_N_MAX: 64
+  MIXED_PRECISION: true
   INTERMEDIATE_LOGGING_STEPS: [5, 20, 40]
   GRADIENT_CLIPPING_NORM: 1.0
   GRADIENT_CHECKPOINTING: false
@@ -40,7 +39,9 @@ TRAINING:
 
 DATASET:
   NAME: "emoji"                            # Name of the dataset [emoji, e2h, mnist]
-  TARGET_SIZE: 48
+  TARGET_SIZE: 40
+  TARGET_PADDING: 16
+  NUM_WORKERS: 4
   EMOJIS:
     - "😭"
     - "🔥"
@@ -50,7 +51,7 @@ DATASET:
 
 PATTERN_POOL:
   ENABLED: true
-  POOL_SIZE: 1024
+  POOL_SIZE: 256
   POOL_DELAY: 1
   POOL_START_RATIO: 0.5
   POOL_END_RATIO: 0.5

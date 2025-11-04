@@ -44,16 +44,16 @@ class LatentWrapper(nn.Module):
     def decode(self, z):
         """Decode from latent to pixel space"""
         return self.encoder_decoder.decode(z)
-        
-    def evolve_in_pixel_space(self, x, cond=None, freeze_channels=None, fire_rate=None, step_size=1.0, return_residuals=False):
+
+    def evolve_in_pixel_space(self, x, cond=None, freeze_channels=None, step_size=1.0, return_residuals=False):
         """Evolve directly in pixel space"""
-        return self.base_model(x, cond, fire_rate, step_size, freeze_channels, return_residuals)
+        return self.base_model(x=x, cond=cond, step_size=step_size, freeze_channels=freeze_channels, return_residuals=return_residuals)
         
-    def evolve_in_latent_space(self, x, cond=None, freeze_channels=None, fire_rate=None, step_size=1.0, return_residuals=False):
+    def evolve_in_latent_space(self, x, cond=None, freeze_channels=None, step_size=1.0, return_residuals=False):
         """Encode, evolve in latent space, then decode"""
         print(f"Input shape: {x.shape}, cond shape: {cond.shape if cond is not None else 'None'}")
         latent_x = self.encode(x[:, :self.config.LATENT_TRAINING.LATENT_AE_IN_CHANNEL])
-        evolved_latent = self.base_model(latent_x, cond, fire_rate, step_size, freeze_channels, return_residuals)
+        evolved_latent = self.base_model(x=latent_x, cond=cond, step_size=step_size, freeze_channels=freeze_channels, return_residuals=return_residuals)
         
         # Handle the case where return_residuals is True
         if return_residuals:
@@ -61,7 +61,7 @@ class LatentWrapper(nn.Module):
             return self.decode(evolved_state), residuals
         
         return self.decode(evolved_latent)
-        
-    def forward(self, x, cond=None, fire_rate=None, step_size=1.0, freeze_channels=None, return_residuals=False):
+
+    def forward(self, x, cond=None, step_size=1.0, freeze_channels=None, return_residuals=False):
         """Evolve in latent space"""
-        return self.evolve_in_latent_space(x, cond, freeze_channels, fire_rate, step_size, return_residuals)
+        return self.evolve_in_latent_space(x, cond, freeze_channels, step_size, return_residuals)

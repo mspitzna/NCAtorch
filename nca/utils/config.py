@@ -151,6 +151,7 @@ class DatasetConfig(BaseModel):
     ENABLE_ROTATION: bool = False  # Enable rotation transformations in GrowingMNISTDataset
     ENABLE_ZOOM: bool = False  # Enable zoom transformations in GrowingMNISTDataset
     Z_LATENT_NOISE_CHANNEL: bool = False  # Add latent noise channel as last dimension to target and seed
+    
     @field_validator("DATASET_SAMPLE_PATH")
     @classmethod
     def check_path_exists(cls, value: Path):
