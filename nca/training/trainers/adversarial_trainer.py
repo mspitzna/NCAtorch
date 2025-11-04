@@ -123,18 +123,25 @@ class AdversarialTrainer(BaseTrainer):
                 d_loss = loss_fake + loss_real + self.gp_weight * gp
             
             # Backward pass and optimizer step for the Critic
+            d_optimizer_step_ran = True
             if self.config.TRAINING.MIXED_PRECISION:
+                scale_before = self.scaler.get_scale()
                 self.scaler.scale(d_loss).backward()
                 self.scaler.unscale_(self.d_optimizer)
                 torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=self.config.TRAINING.GRADIENT_CLIPPING_NORM)
                 self.scaler.step(self.d_optimizer)
-                # The BaseTrainer will call scaler.update() at the end of the main loop
+                self.scaler.update()
+                scale_after = self.scaler.get_scale()
+                # Skip LR scheduling if the optimizer step was dropped because of overflow.
+                d_optimizer_step_ran = scale_after >= scale_before
             else:
                 d_loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=self.config.TRAINING.GRADIENT_CLIPPING_NORM)
                 self.d_optimizer.step()
+                d_optimizer_step_ran = True
             
-            if self.d_scheduler: self.d_scheduler.step()
+            if self.d_scheduler and d_optimizer_step_ran:
+                self.d_scheduler.step()
             
             # Log critic metrics
             self.logger.add_metric("d_loss", d_loss.item())

@@ -237,7 +237,9 @@ class BaseTrainer(ABC):
                 # --- Optimizer Step / LR Scheduling / Grad Accumulation ---
                 if accumulated_steps % self.accumulation_steps == 0:
                     # Gradient clipping and optimizer step
+                    optimizer_step_ran = True
                     if self.config.TRAINING.MIXED_PRECISION and self.scaler is not None:
+                        scale_before = self.scaler.get_scale()
                         # Unscale gradients before clipping
                         self.scaler.unscale_(self.optimizer)
                         torch.nn.utils.clip_grad_norm_(
@@ -246,16 +248,20 @@ class BaseTrainer(ABC):
                         )
                         self.scaler.step(self.optimizer)
                         self.scaler.update()
+                        scale_after = self.scaler.get_scale()
+                        # GradScaler lowers the scale when it skips the optimizer step (overflow).
+                        optimizer_step_ran = scale_after >= scale_before
                     else:
                         torch.nn.utils.clip_grad_norm_(
                             self.ca_model.parameters(),
                             max_norm=self.config.TRAINING.GRADIENT_CLIPPING_NORM,
                         )
                         self.optimizer.step()
+                        optimizer_step_ran = True
 
                     self.optimizer.zero_grad()
                     accumulated_steps = 0  # Reset accumulation counter
-                    if self.lr_scheduler is not None:
+                    if self.lr_scheduler is not None and optimizer_step_ran:
                         self.lr_scheduler.step()  # Step scheduler after optimizer
                         self.logger.add_metric(
                             "lr", self.optimizer.param_groups[0]["lr"]
