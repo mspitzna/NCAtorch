@@ -109,14 +109,57 @@ class CaHandler:
         # Convert Pydantic config to a nicely formatted dict
         config_dict = self._format_config_for_ui(self.config)
 
+        try:
+            model_cfg = self.config.MODEL
+            perceptions = []
+
+            # Safely iterate through perceptions
+            if hasattr(model_cfg, 'PERCEPTIONS') and model_cfg.PERCEPTIONS:
+                for idx, percep in enumerate(model_cfg.PERCEPTIONS):
+                    perception_entry = {
+                        "label": f"{idx + 1}. {getattr(percep, 'MODE', 'unknown')}",
+                        "kernel": getattr(percep, "KERNEL_SIZE", None),
+                        "dilation": getattr(percep, "DILATION", 1),
+                        "out_channel": getattr(percep, "OUT_CHANNEL", None),
+                    }
+                    perceptions.append(perception_entry)
+
+            hidden_channels = getattr(model_cfg, "HIDDEN_CHANNELS", [])
+            hidden_channels_display = ", ".join(str(v) for v in hidden_channels) if hidden_channels else "—"
+
+            model_overview = {
+                "name": getattr(model_cfg, "NAME", "Unknown"),
+                "channel_n": getattr(model_cfg, "CHANNEL_N", None),
+                "channel_out": getattr(model_cfg, "CHANNEL_OUT", None),
+                "hidden_channels": hidden_channels_display,
+                "fire_rate": getattr(model_cfg, "FIRE_RATE", None),
+                "use_positional_embeddings": getattr(model_cfg, "USE_POSITIONAL_EMBEDDINGS", False),
+                "perceptions": perceptions,
+            }
+
+            # Add MODEL_OVERVIEW to config_dict
+            config_dict["MODEL_OVERVIEW"] = model_overview
+
+            print(f"DEBUG: Created MODEL_OVERVIEW with {len(perceptions)} perceptions for dataset {self.config.DATASET.NAME}")
+            print(f"DEBUG: Perceptions: {perceptions}")
+
+        except Exception as e:
+            print(f"ERROR creating MODEL_OVERVIEW: {e}")
+            import traceback
+            traceback.print_exc()
+
         if self.config.DATASET.NAME == "emoji":
-            return {
+            result = {
                 **config_dict,
                 "emojis": self.config.DATASET.EMOJIS,
             }
+            print(f"DEBUG: Emoji dataset - MODEL_OVERVIEW in result: {'MODEL_OVERVIEW' in result}")
+            return result
         elif self.config.DATASET.NAME == "ot":
+            print(f"DEBUG: OT dataset - MODEL_OVERVIEW in config_dict: {'MODEL_OVERVIEW' in config_dict}")
             return config_dict
         else:
+            print(f"DEBUG: Other dataset ({self.config.DATASET.NAME}) - MODEL_OVERVIEW in config_dict: {'MODEL_OVERVIEW' in config_dict}")
             return config_dict
 
     def _format_config_for_ui(self, config):

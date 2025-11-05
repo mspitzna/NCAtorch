@@ -35,23 +35,31 @@
 </head>
 
 <body class="bg-gradient-to-br from-slate-100 via-slate-50 to-blue-50 font-sans leading-normal tracking-normal min-h-screen">
-  <div class="max-w-7xl mx-auto p-6">
-    <h1 class="text-4xl font-bold text-center bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-8 drop-shadow-sm">
+  <div class="max-w-[1800px] mx-auto px-6 py-6">
+    <h1 class="text-4xl font-bold text-center bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-8 pb-2">
       {% block header %}Interactive Neural CA{% endblock %}
     </h1>
 
     <!-- Flex container for canvas, content, and config panel -->
     <div class="flex gap-6">
 
-      <!-- Global Canvas -->
-      <div class="w-1/2">
-        <div class="bg-white rounded-2xl shadow-xl p-6 mb-6">
+      <!-- Left Column: Model Configuration -->
+      <div class="flex-1 min-w-[300px] max-w-[400px]">
+        <div class="bg-white shadow-xl rounded-2xl p-6">
+          {% block content %}{% endblock %}
+        </div>
+      </div>
+
+      <!-- Middle Column: Canvas -->
+      <div class="flex-1 min-w-[500px]  max-w-[600px] flex flex-col gap-6">
+        <!-- Canvas -->
+        <div class="bg-white rounded-2xl shadow-xl p-6">
           <canvas id="canvas" width="512" height="512" class="mx-auto rounded-lg shadow-inner border-2 border-slate-200"
             style="image-rendering: pixelated;"></canvas>
         </div>
 
         <!-- Control Buttons -->
-        <div class="flex justify-center gap-3 mb-6">
+        <div class="flex justify-center gap-3">
           <button id="startButton" class="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold py-3 px-6 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 flex items-center gap-2">
             <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
               <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path>
@@ -77,46 +85,65 @@
             Clear
           </button>
         </div>
-        <!-- Custom Dataset-Specific Content -->
-        <div class="bg-white shadow-xl rounded-2xl p-6">
-          {% block content %}{% endblock %}
-        </div>
       </div>
 
-      <!-- Block content and config panel (flex child) -->
-      <div class="w-1/2 flex flex-col gap-4">
+      <!-- Right Column: Model Selection and Canvas Settings -->
+      <div class="flex-1 min-w-[400px] max-w-[500px] flex flex-col gap-4">
 
-        <!-- Form for loading model -->
-        <form id="loadModelForm" class="bg-white shadow-xl rounded-2xl px-8 pt-6 pb-8">
-          <div class="mb-4">
-            <label for="logPath" class="block text-slate-700 text-sm font-semibold mb-3 flex items-center gap-2">
-              <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
-              </svg>
-              Select Model
-            </label>
-            <select id="logPath" required class="shadow-sm border-2 border-slate-200 rounded-xl w-full py-3 px-4 text-slate-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all">
-              {% for folder in folders %}
-              <option value="{{ folder }}">{{ folder }}</option>
-              {% endfor %}
-            </select>
+        <!-- Select Model Panel -->
+        <div class="bg-white shadow-xl rounded-2xl px-6 pt-6 pb-6">
+          <h2 class="text-xl font-bold mb-4 text-slate-800 flex items-center gap-2">
+            <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+            </svg>
+            Select Model
+          </h2>
+
+          <!-- Display Current Model Name -->
+          <div id="current-model-display" class="mb-4 p-3 bg-blue-50 border-l-4 border-blue-500 rounded-lg">
+            <div class="text-xs font-semibold text-blue-600 mb-1">Current Model:</div>
+            <div id="model-folder-name" class="text-sm font-mono text-blue-900">{% if current_model_folder %}{{ current_model_folder }}{% elif folders %}{{ folders[0] }}{% else %}No model loaded{% endif %}</div>
           </div>
-          <button type="submit" class="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-semibold py-3 px-4 rounded-xl w-full shadow-md hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5">
-            Load Model
-          </button>
-        </form>
 
-        <div class="bg-white shadow-xl rounded-2xl px-8 pt-6 pb-8">
-          <div class="relative mb-8">
-            <label for="steps-range" class="block mb-4 text-sm font-semibold text-slate-700 flex items-center gap-2">
-              <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <form id="loadModelForm">
+            <div class="flex gap-2">
+              <select id="logPath" required class="shadow-sm border-2 border-slate-200 rounded-xl flex-grow py-2 px-3 text-slate-700 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all">
+                {% for folder in folders %}
+                <option value="{{ folder }}">{{ folder }}</option>
+                {% endfor %}
+              </select>
+              <button type="submit" class="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-semibold py-2 px-6 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 whitespace-nowrap">
+                Load
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Dataset-Specific Config Panel (Emoji Controls) -->
+        <div class="bg-white shadow-xl rounded-2xl p-6">
+          {% block config_panel %}{% endblock %}
+        </div>
+
+        <!-- Canvas Settings Panel -->
+        <div class="bg-white shadow-xl rounded-2xl px-6 pt-6 pb-6">
+          <h2 class="text-xl font-bold mb-4 text-slate-800 flex items-center gap-2">
+            <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+            </svg>
+            Canvas Settings
+          </h2>
+
+          <!-- Updates per Second -->
+          <div class="mb-6">
+            <label for="steps-range" class="block mb-3 text-sm font-semibold text-slate-700 flex items-center gap-2">
+              <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
               </svg>
               Updates per Second: <span id="steps-value" class="font-bold text-blue-600">24</span>
             </label>
             <input id="steps-range" type="range" min="1" max="100" value="50" step="1"
               class="w-full h-3 bg-gradient-to-r from-blue-200 to-blue-300 rounded-lg appearance-none cursor-pointer slider">
-            <!-- Log-scaled labels -->
             <div class="flex justify-between mt-2 text-xs text-slate-500 font-medium">
               <span>1</span>
               <span>8</span>
@@ -125,30 +152,26 @@
               <span>100</span>
             </div>
           </div>
-        </div>
 
-        <form id="adjustImageSizeForm" class="bg-white shadow-xl rounded-2xl px-8 pt-6 pb-8">
-          <div class="mb-4">
+          <!-- Canvas Size -->
+          <form id="adjustImageSizeForm">
             <label for="height" class="block text-slate-700 text-sm font-semibold mb-3 flex items-center gap-2">
-              <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
               </svg>
               Canvas Size
             </label>
-            <input type="text" id="height" placeholder="Enter size (e.g., 512)" required
-              class="shadow-sm border-2 border-slate-200 rounded-xl w-full py-3 px-4 text-slate-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all" />
-          </div>
-          <button type="submit" class="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold py-3 px-4 rounded-xl w-full shadow-md hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5">
-            Adjust Size
-          </button>
-        </form>
-
-        <!-- Dataset-Specific Config Panel -->
-        <div class="bg-white shadow-xl rounded-2xl p-6">
-          {% block config_panel %}{% endblock %}
+            <div class="flex gap-2">
+              <input type="text" id="height" placeholder="512" required
+                class="shadow-sm border-2 border-slate-200 rounded-xl flex-grow py-2 px-3 text-slate-700 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all" />
+              <button type="submit" class="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold py-2 px-6 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 whitespace-nowrap">
+                Adjust
+              </button>
+            </div>
+          </form>
         </div>
 
-      </div> <!-- End of block content and config panel -->
+      </div> <!-- End of right column -->
     </div> <!-- End of flex container -->
   </div>
 </body>
@@ -265,6 +288,8 @@
 
         if (result.status === "Model loaded successfully") {
           console.log(result.status);
+          // Update the current model display before redirecting
+          document.getElementById("model-folder-name").textContent = logPath;
           window.location.href = result.redirect_url; // Redirect to the URL provided in the JSON response
         } else {
           console.error("Unexpected status:", result.status);

@@ -59,6 +59,7 @@ random_changes_event = asyncio.Event()
 # Initialize CA and State Handlers
 # ========================
 log_path = "./train_log/emoji_conv3x3"  # Adjust as needed
+current_model_folder = "emoji_conv3x3"  # Track the current model folder
 ca_handler = CaHandler()
 config = ca_handler.load_model(log_path)
 IMG_SIZE, COLOR_DIM, COND_DIM, x_tensor, current_input_image, cond = ca_handler.get_initial_data()
@@ -411,7 +412,8 @@ async def load_model(data: dict):
     """
     Load a new model based on the provided log folder path.
     """
-    global state_handler
+    global state_handler, current_model_folder
+    current_model_folder = data["log_path"]
     config = ca_handler.load_model("train_log/" + data["log_path"])
     IMG_SIZE, COLOR_DIM, COND_DIM, x_tensor, current_input_image, cond = ca_handler.get_initial_data()
     state_handler = StateHandler(config, IMG_SIZE, COLOR_DIM, COND_DIM)
@@ -514,13 +516,19 @@ async def dataset_page(request: Request, dataset_type: str):
     """
 
     train_folders = get_trainlog_folders()
+    ui_config = ca_handler.get_ui_config()
+    model_cfg = getattr(ca_handler.config, "MODEL", None)
+    model_name = getattr(model_cfg, "NAME", "Unknown") if model_cfg else "Unknown"
 
     template_name = f"{dataset_type}.html"
     context = {
         "request": request,
         "title": f"Dataset Page for {dataset_type}",
-        "data": ca_handler.get_ui_config(),
+        "data": ui_config,
+        "model_name": model_name,
+        "model_overview": ui_config.get("MODEL_OVERVIEW"),
         "folders": train_folders,
+        "current_model_folder": current_model_folder,
     }
     return templates.TemplateResponse(template_name, context)
 
