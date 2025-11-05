@@ -327,7 +327,7 @@ def load_config(config_path: str) -> Config:
     """Load YAML config and parse it into a Pydantic model."""
     import yaml
 
-    with open(config_path, "r") as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         raw_config = yaml.safe_load(f)
     config = Config(**raw_config)
     return config

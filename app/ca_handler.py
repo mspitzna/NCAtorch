@@ -19,6 +19,7 @@ class CaHandler:
 
         # Use GPU if available for better performance
         device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
+        print(f"Using device: {device}")
 
         self.config = self.config.model_copy(
             update={
