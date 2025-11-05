@@ -50,15 +50,16 @@ If your work has improved **NCAtorch** and you would like more people to see it,
 git clone https://github.com/mspitzna/nca-torch.git
 cd nca-torch
 ```
-2. Optional but recommended:
+2. (Recommended) Create and activate a virtual environment so the dependencies stay isolated:
 ```bash
-python -m venv ncatorch
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 ```
 
-2. Install PyTorch (if not already installed):
+3. Install PyTorch (if not already installed) using the command generated for your system:
 Visit https://pytorch.org/get-started/locally/ for platform-specific instructions.
 
-3. Install other dependencies:
+4. Install the remaining project requirements with the environment active:
 ```bash
 pip install -r requirements.txt
 ```
@@ -82,6 +83,8 @@ uvicorn app.fastapi_backend:app
 ```
 
 Then open your browser to `http://localhost:8000`
+
+📹 **Demo video**: We recorded an interactive walkthrough, but we cannot host it anonymously in this repository. We will share the anonymized cut alongside the paper once it clears peer review.
 
 
 ## ⚙️ Configuration
