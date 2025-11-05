@@ -73,21 +73,26 @@ manager = ConnectionManager()
 # ========================
 # Utility Functions
 # ========================
-def convert_to_img(x_tensor):
+def _to_cpu_detached(tensor: torch.Tensor) -> torch.Tensor:
+    """Move tensor to CPU without tracking gradients."""
+    return tensor.detach().cpu()
+
+
+def convert_to_img(x_tensor: torch.Tensor, config, color_dim: int):
     """
     Convert the CA tensor state to an RGB image based on the dataset configuration.
     """
-    if state_handler.get_config().DATASET.NAME == "mnist":
+    if config.DATASET.NAME == "mnist":
         dataset = ca_handler.get_dataset()
         img = dataset.generate_colored_image(
-            to_grayscale(state_handler.get_img_tensor()), x_tensor[0, -10:]
+            to_grayscale(x_tensor), x_tensor[0, -10:]
         )
-        img = to_rgb(img[:, :3]).numpy().clip(0, 1).squeeze(0).transpose(1, 2, 0)
+        img = to_rgb(img[:, :3].clone()).numpy().clip(0, 1).squeeze(0).transpose(1, 2, 0)
         img = (img * 255).astype(np.uint8)
-    elif state_handler.get_config().DATASET.NAME == "moving_mnist":
+    elif config.DATASET.NAME == "moving_mnist":
         img = (
             (
-                to_rgb(x_tensor[:, :1].clone().cpu().detach())
+                to_rgb(x_tensor[:, :1].clone())
                 .numpy()
                 .clip(0, 1)
                 .squeeze(0)
@@ -98,7 +103,7 @@ def convert_to_img(x_tensor):
     else:
         img = (
             (
-                to_rgb(x_tensor[:, :state_handler.get_color_dim()].clone().cpu().detach())
+                to_rgb(x_tensor[:, :color_dim].clone())
                 .numpy()
                 .clip(0, 1)
                 .squeeze(0)
@@ -135,38 +140,48 @@ async def apply_ca_changes():
         await asyncio.sleep(state_handler.get_speed())
 
         with state_handler.get_lock():
-            x_tensor = state_handler.get_img_tensor()
+            x_tensor = state_handler.get_img_tensor().clone().detach()
+            cond_tensor = state_handler.get_condition_tensor()
+            cond_tensor = cond_tensor.clone().detach() if cond_tensor is not None else None
+            config = state_handler.get_config()
+            color_dim = state_handler.get_color_dim()
 
-            # Adaptive broadcast interval based on image size
-            img_size = x_tensor.shape[-1] * x_tensor.shape[-2]
-            if img_size > 512 * 512:
-                broadcast_interval = 10  # Skip more frames for very large images
-            elif img_size > 256 * 256:
-                broadcast_interval = 4  # Moderate skipping for medium images
-            else:
-                broadcast_interval = 1
+        # Adaptive broadcast interval based on image size
+        img_size = x_tensor.shape[-1] * x_tensor.shape[-2]
+        if img_size > 512 * 512:
+            broadcast_interval = 10  # Skip more frames for very large images
+        elif img_size > 256 * 256:
+            broadcast_interval = 4  # Moderate skipping for medium images
+        else:
+            broadcast_interval = 1
 
-            x_tensor_gpu, x_latent_gpu = ca_handler.forward(
-                x_tensor, state_handler.get_condition_tensor()
-            )
-            # For latent training, store the latent for next iteration
-            # but keep the decoded tensor for display
-            if state_handler.get_config().LATENT_TRAINING.ENABLED:
-                x_latent_cpu = x_latent_gpu.cpu()
+        x_tensor_gpu, x_latent_gpu = await asyncio.to_thread(
+            ca_handler.forward, x_tensor, cond_tensor
+        )
+        # For latent training, store the latent for next iteration
+        # but keep the decoded tensor for display
+        if config.LATENT_TRAINING.ENABLED:
+            x_latent_cpu = await asyncio.to_thread(_to_cpu_detached, x_latent_gpu)
+            x_display_cpu = await asyncio.to_thread(_to_cpu_detached, x_tensor_gpu)
+        else:
+            x_display_cpu = await asyncio.to_thread(_to_cpu_detached, x_tensor_gpu)
+            x_latent_cpu = None
+
+        img = await asyncio.to_thread(convert_to_img, x_display_cpu, config, color_dim)
+
+        with state_handler.get_lock():
+            if config.LATENT_TRAINING.ENABLED:
                 state_handler.set_img_tensor(x_latent_cpu)
-                x_display_cpu = x_tensor_gpu.cpu()
             else:
-                x_display_cpu = x_tensor_gpu.cpu()
                 state_handler.set_img_tensor(x_display_cpu)
+
+            state_handler.set_img_canvas(img)
+            img_for_broadcast = img.copy()
 
         # Only broadcast every Nth frame to reduce network overhead
         frame_counter += 1
         if frame_counter >= broadcast_interval:
-            # Only convert to image when we're actually broadcasting
-            with state_handler.get_lock():
-                img = convert_to_img(x_display_cpu)
-                state_handler.set_img_canvas(img)
-            await manager.broadcast_image(state_handler.get_img_canvas())
+            await manager.broadcast_image(img_for_broadcast)
             frame_counter = 0
 
         # Performance monitoring
