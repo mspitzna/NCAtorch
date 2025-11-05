@@ -53,20 +53,22 @@ class Logger:
             os.makedirs(os.path.join(self.config.FOLDER_NAME, "imgs"), exist_ok=True)
             return self.config.FOLDER_NAME
 
-    def log_metrics(self, step, silent=False):
+    def log_metrics(self, step):
         """
         Log a dictionary of metrics for a given step. Metrics are stored locally
         and sent to wandb (if enabled).
         """
         agg_metrics = self._get_aggregated_metrics()
-
-        # Log to console
-        if not silent:
-            print(f"Step {step}: {agg_metrics}", flush=True)
         
         # Log to wandb if enabled
         if self.use_wandb:
             wandb.log({**agg_metrics, "Iteration": step}, step=step)
+
+    def peek_metrics(self):
+        """
+        Return the aggregated metrics without mutating internal buffers.
+        """
+        return self._get_aggregated_metrics()
 
     def log_images(self, step):
         """

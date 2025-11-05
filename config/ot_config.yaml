@@ -13,8 +13,10 @@ MODEL:
   PERCEPTIONS:
     - MODE: "conv"
       KERNEL_SIZE: 3
+      OUT_CHANNEL: 80
     - MODE: "deformable_conv"
       KERNEL_SIZE: 3
+      OUT_CHANNEL: 80
 
 
 TRAINING:

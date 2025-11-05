@@ -49,6 +49,7 @@ class BaseTrainer(ABC):
 
         self.logger = Logger(config, config_path=config_path, model=self.ca_model)
         self.output_folder = self.logger.get_output_folder()
+        self._interval_metric_buffer = {}
 
         self.intermediate_logging_steps = (
             self.config.TRAINING.INTERMEDIATE_LOGGING_STEPS
@@ -277,8 +278,9 @@ class BaseTrainer(ABC):
                     )  # Use final_state (x or z)
 
                 # Logging and visualization
+                use_wandb = self.logger.use_wandb
                 if (i + 1) % self.log_interval == 0:
-                    self.commit_logs(i, images=True, silent=True)
+                    self.commit_logs(i, images=True, silent=use_wandb)
                 else:
                     self.commit_logs(i, silent=True)
 
@@ -410,6 +412,16 @@ class BaseTrainer(ABC):
         self.logger.add_img_logs(x0, x, target)
 
     def commit_logs(self, step, images=False, silent=False):
+        metrics_snapshot = self.logger.peek_metrics()
+        if metrics_snapshot:
+            for key, value in metrics_snapshot.items():
+                self._interval_metric_buffer.setdefault(key, []).append(value)
+            if not images and not silent:
+                print(f"Step {step + 1}: {metrics_snapshot}", flush=True)
+
+        # Always forward metrics to logger outputs (e.g., wandb) but suppress console prints here.
+        self.logger.log_metrics(step + 1)
+
         if images:
             if self.use_latent:
                 for key, val in self.logger.get_state_logs().items():
@@ -417,7 +429,15 @@ class BaseTrainer(ABC):
                     decoded_val = self.latent_wrapper.decode(val).detach().cpu()
                     self.logger.add_state_log(key, decoded_val)
             self.logger.log_images(step + 1)
-        self.logger.log_metrics(step + 1, silent=silent)
+            if not silent and self._interval_metric_buffer:
+                averaged_metrics = {
+                    key: float(np.mean(values))
+                    for key, values in self._interval_metric_buffer.items()
+                }
+                print(f"Step {step + 1}: {averaged_metrics}", flush=True)
+            # Reset the running buffer regardless of print path to avoid stale accumulation.
+            self._interval_metric_buffer.clear()
+
         self.logger.reset_metrics()
 
     def save_to_image(self, x, path):

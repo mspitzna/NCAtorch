@@ -7,12 +7,21 @@ class PerceptionConfig(BaseModel):
     MODE: str = "conv"
     KERNEL_SIZE: int = 3
     DILATION: int = 1
+    OUT_CHANNEL: int = 80
+
     @field_validator("MODE")
     @classmethod
     def check_mode(cls, value):
         valid_modes = ["conv", "attention", "sobel", "deformable_conv", "residual_conv"]
         if value not in valid_modes:
             raise ValueError(f'mode must be one of {valid_modes}.')
+        return value
+
+    @field_validator("OUT_CHANNEL")
+    @classmethod
+    def check_out_channel(cls, value):
+        if value <= 0:
+            raise ValueError("OUT_CHANNEL must be a positive integer.")
         return value
 
 

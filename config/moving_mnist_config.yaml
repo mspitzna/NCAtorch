@@ -16,8 +16,10 @@ MODEL:
   PERCEPTIONS:
     - MODE: conv
       KERNEL_SIZE: 3
+      OUT_CHANNEL: 128
     - MODE: residual_conv
       KERNEL_SIZE: 5
+      OUT_CHANNEL: 128
 
 TRAINING:
   BATCH_SIZE: 18

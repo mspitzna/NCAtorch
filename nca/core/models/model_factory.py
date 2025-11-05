@@ -19,7 +19,6 @@ def create_model(config: Config, cond_dim, img_height, img_width):
     device = config.DEVICE
     use_positional_embeddings = config.MODEL.USE_POSITIONAL_EMBEDDINGS
     noise_injection = config.MODEL.NOISE_INJECTION
-    perception_output_dim = config.MODEL.HIDDEN_CHANNELS[0]
     fire_rate = config.MODEL.FIRE_RATE
 
     def get_img_dims(height, width, compression):
@@ -41,7 +40,7 @@ def create_model(config: Config, cond_dim, img_height, img_width):
         living_mask_index = config.MODEL.LIVING_MASK_INDEX
 
 
-    perception_module = get_perception(config, cond_dim, perception_output_dim, device)
+    perception_module = get_perception(config, cond_dim, device)
     update_model = get_update_model(config, perception_module.get_out_channel(), channel_out, device)
 
     ca = CAModel(
@@ -93,7 +92,7 @@ def get_update_model(config: Config, in_channel_n, channel_out, device):
     else:
         raise ValueError(f"Invalid model name: {model_name}")
 
-def get_perception(config: Config, cond_dim, perception_output_dim, device):
+def get_perception(config: Config, cond_dim, device):
     # Determine the number of channels in the state.
     channel_n = (
         config.MODEL.CHANNEL_N
@@ -113,11 +112,12 @@ def get_perception(config: Config, cond_dim, perception_output_dim, device):
         kernel_size = percep_cfg.KERNEL_SIZE
         # For modes that use dilation, use the provided value.
         dilation = percep_cfg.DILATION
+        out_channel = percep_cfg.OUT_CHANNEL
 
         if mode == "attention":
             return AttentionPerception(
                 in_channel=in_channel_n,
-                out_channel=perception_output_dim,
+                out_channel=out_channel,
                 kernel_size=kernel_size,
             )
         elif mode == "sobel":
@@ -128,14 +128,14 @@ def get_perception(config: Config, cond_dim, perception_output_dim, device):
         elif mode == "deformable_conv":
             return DeformableConvPerception(
                 in_channel=in_channel_n,
-                out_channel=perception_output_dim,
+                out_channel=out_channel,
                 kernel_size=kernel_size,
                 device=device,
             )
         elif mode == "residual_conv":
             return ResidualConvPerception(
                 in_channel=in_channel_n,
-                out_channel=perception_output_dim,
+                out_channel=out_channel,
                 kernel_size=kernel_size,
                 device=device,
             )
@@ -143,7 +143,7 @@ def get_perception(config: Config, cond_dim, perception_output_dim, device):
             # Default to regular convolution perception.
             return ConvPerception(
                 in_channel=in_channel_n,
-                out_channel=perception_output_dim,
+                out_channel=out_channel,
                 kernel_size=kernel_size,
                 device=device,
                 dilation=dilation,

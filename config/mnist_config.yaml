@@ -17,6 +17,7 @@ MODEL:
   PERCEPTIONS:
     - MODE: "conv"
       KERNEL_SIZE: 3
+      OUT_CHANNEL: 80
 
 
 TRAINING:
