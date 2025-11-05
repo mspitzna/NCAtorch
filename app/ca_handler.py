@@ -17,16 +17,13 @@ class CaHandler:
     def load_model(self, log_path: str) -> Config:
         self.config = load_config(os.path.join(log_path, "config.yaml"))
 
-        # Set random seed for deterministic inference
-        torch.manual_seed(self.config.SEED)
-        np.random.seed(self.config.SEED)
-
         # Use GPU if available for better performance
         device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
         self.config = self.config.model_copy(
             update={
                 "DEVICE": device,
+                "SEED": -1
             }
         )
 
