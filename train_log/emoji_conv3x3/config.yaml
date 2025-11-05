@@ -5,7 +5,7 @@ DEVICE: "cuda"                             # Device to use for training
 WANDB: true                               # Flag to enable logging to Weights & Biases
 
 MODEL:
-  NAME: "ConvCA"
+  NAME: "MLP"
   HIDDEN_CHANNELS: [80]
   CHANNEL_N: 16
   USE_POSITIONAL_EMBEDDINGS: False
@@ -39,6 +39,7 @@ TRAINING:
 DATASET:
   NAME: "emoji"                            # Name of the dataset [emoji, e2h, mnist]
   TARGET_SIZE: 48
+  TARGET_PADDING: 16
   EMOJIS:
     - "😭"
     - "🔥"

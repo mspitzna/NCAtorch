@@ -26,7 +26,12 @@ Key features:
 
 ## 📑 What's New
 
-- **[2025-11]** 🎉 Initial release of NCA-torch framework
+- **[TBA, 2025]** 🎉 Initial release of NCA-torch framework
+
+## Community Works
+
+If your work has improved **NCAtorch** and you would like more people to see it, please inform us!
+
 
 ## 🚀 Quick Start
 
@@ -44,6 +49,10 @@ Key features:
 ```bash
 git clone https://github.com/mspitzna/nca-torch.git
 cd nca-torch
+```
+2. Optional but recommended:
+```bash
+python -m venv ncatorch
 ```
 
 2. Install PyTorch (if not already installed):
@@ -69,7 +78,7 @@ python train_scripts/train_ca.py --config config/emoji_config.yaml --device cuda
 Launch the web interface to interact with trained models:
 
 ```bash
-uvicorn app.fastapi_backend:app --reload
+uvicorn app.fastapi_backend:app
 ```
 
 Then open your browser to `http://localhost:8000`
@@ -77,34 +86,36 @@ Then open your browser to `http://localhost:8000`
 
 ## ⚙️ Configuration
 
-Models and training are configured via YAML files. Here's a basic example:
+Models and training are configured via YAML files. Each perception entry declares its own `OUT_CHANNEL` to set the number of filters emitted from that branch. Here's a basic example:
 
 ```yaml
-PROJECT_NAME: "your_project"
-TRAIN_NAME: "your_training_0"
+PROJECT_NAME: "your_project"        # High-level grouping for experiment tracking
+TRAIN_NAME: "your_training_0"       # Unique name for this training run
 
 MODEL:
-  NAME: "ConvCA"
-  CHANNEL_N: 16
-  HIDDEN_CHANNELS: [80]
+  NAME: "MLP"                      # Select the MLP architecture for the update module
+  HIDDEN_CHANNELS: [64, 128]       # Hidden units per layer in the update module
+  CHANNEL_N: 16                    # Number of state channels per cell
   PERCEPTIONS:
-    - MODE: "conv"
-      KERNEL_SIZE: 3
-    - MODE: "residual_conv"
-      KERNEL_SIZE: 3
+    - MODE: "conv"                 # Standard convolutional neighborhood perception
+      KERNEL_SIZE: 5
+      OUT_CHANNEL: 48              # Filters for this perception branch
+    - MODE: "residual_conv"        # Residual convolutional neighborhood perception
+      OUT_CHANNEL: 32              # Filters for this perception branch
 
 TRAINING:
-  BATCH_SIZE: 18
-  LEARNING_RATE: 0.0005
-  STEPS: 50000
-  LOSS_FN: "mse"
-  ITER_N_MIN: 20
-  ITER_N_MAX: 26
-  INTERMEDIATE_LOGGING_STEPS: [5, 10, 15]
+  BATCH_SIZE: 18                   # Cell grids processed per optimization step
+  LEARNING_RATE: 0.0005            # learning rate (see config/training)
+  STEPS: 50000                     # Total optimization steps (in batches)
+  LOSS_FN: "mse"                   # Target reconstruction loss
+  ITER_N_MIN: 20                   # Minimum rollout iterations per batch
+  ITER_N_MAX: 26                   # Maximum rollout iterations per batch
+  INTERMEDIATE_LOGGING_STEPS: [5, 10, 15]  # Intermediate logging states for visualization
 
 DATASET:
-  NAME: "emoji"
-  TARGET_SIZE: 64
+  NAME: "emoji"                    # Use built-in emoji dataset
+  TARGET_SIZE: 64                  # Resolution for targets and predictions
+  TARGET_PADDING: 16               # Padding arround target emoji
   EMOJIS:
     - "😭"
     - "🔥"
@@ -164,13 +175,6 @@ For detailed documentation on:
 
 Please refer to the [docs/](docs/) directory (coming soon).
 
-## 🔗 Related Projects
-
-- [Growing Neural Cellular Automata](https://distill.pub/2020/growing-ca/) - Original work by Mordvintsev et al.
-- [Self-Organising Textures](https://distill.pub/selforg/2021/textures/) - Texture synthesis with NCAs
-- [Self-classifying MNIST Digits](https://distill.pub/2020/selforg/mnist/) - Classification with NCAs
-- TODO
-
 ## 📝 Citation
 
 If you find this work useful, please consider citing:
@@ -186,12 +190,12 @@ If you find this work useful, please consider citing:
 
 ## 👥 Authors
 
-TODO
+TBA
 
 ## 📄 License
 
-TODO
+TBA
 
 ## Contact Us
 
-TODO
+TBA

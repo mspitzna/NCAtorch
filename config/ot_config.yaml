@@ -5,7 +5,7 @@ DEVICE: "cuda"                             # Device to use for training
 WANDB: false                               # Flag to enable logging to Weights & Biases
 
 MODEL:
-  NAME: "ConvCA"
+  NAME: "MLP"
   HIDDEN_CHANNELS: [80]
   CHANNEL_N: 16
   LIVING_MASK: false

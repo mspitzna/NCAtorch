@@ -70,7 +70,7 @@ def get_update_model(config: Config, in_channel_n, channel_out, device):
     """
     model_name = config.MODEL.NAME
     print(f"Creating {model_name}. The value of in_channel_n is: {in_channel_n}")
-    if model_name == "ConvCA":
+    if model_name == "MLP":
         model = SimpleMLPUpdate(
             in_channels=in_channel_n,
             out_channels=channel_out,
@@ -79,7 +79,7 @@ def get_update_model(config: Config, in_channel_n, channel_out, device):
             device=device,
         )
         return model.to(device)
-    elif model_name == "ResNetCA":
+    elif model_name == "ResNet":
         model = ResNetUpdate(
             in_channels=in_channel_n,
             out_channels=channel_out,

@@ -5,7 +5,7 @@ DEVICE: "cuda"
 WANDB: true                               # Flag to enable logging to Weights & Biases
 
 MODEL:
-  MODEL_NAME: "ResNetCA"
+  MODEL_NAME: "ResNet"
   HIDDEN_CHANNELS: [256]
   CHANNEL_N: 4
   USE_POSITIONAL_EMBEDDINGS: False

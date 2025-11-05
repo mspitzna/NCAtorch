@@ -26,7 +26,7 @@ class PerceptionConfig(BaseModel):
 
 
 class ModelConfig(BaseModel):
-    NAME: str = "ConvCA"
+    NAME: str = "MLP"
     HIDDEN_CHANNELS: List[int] = [64]
     CHANNEL_N: int = 16
     CHANNEL_OUT: Optional[int] = None
@@ -59,7 +59,7 @@ class ModelConfig(BaseModel):
     @field_validator("NAME")
     @classmethod
     def check_model_name(cls, value):
-        valid_models = ["ConvCA", "ResNetCA", "PathInvertibleCA"]
+        valid_models = ["MLP", "ResNet"]
         if value not in valid_models:
             raise ValueError(f"MODEL.NAME must be one of {valid_models}.")
         return value
@@ -149,7 +149,7 @@ class DatasetConfig(BaseModel):
     DATASET_SAMPLE_PATH: Path = None
     DROP_LAST_BATCH: bool = True
     TARGET_SIZE: int = 64
-    TARGET_PADDING: int = 16
+    TARGET_PADDING: int = 0
     EMOJIS: List[str] = [] #["🙂", "🌈", "🦅", "🐧", "🌻", "🍕"]
     HISTORY_N: int = 1
     REVERSE_HISTORY_SEED: bool = False
