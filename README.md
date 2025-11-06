@@ -4,9 +4,10 @@
     <em>A comprehensive PyTorch-based framework for Neural Cellular Automata research and applications</em>
   </p>
 
-  <p>
+
+  <!-- <p>
     📄 Paper (Coming Soon) &nbsp&nbsp | &nbsp&nbsp 📚 <a href="#-documentation">Documentation</a> &nbsp&nbsp | &nbsp&nbsp 🚀 <a href="#-quick-start">Quick Start</a> &nbsp&nbsp | &nbsp&nbsp 🎨 <a href="#-interactive-visualization">Demo</a>
-  </p>
+  </p> -->
 
   ---
 </div>
@@ -84,8 +85,12 @@ uvicorn app.fastapi_backend:app
 
 Then open your browser to `http://localhost:8000`
 
-📹 **Demo video**: We recorded an interactive walkthrough, but we cannot host it anonymously in this repository. We will share the anonymized cut alongside the paper once it clears peer review.
-
+<div align="center">
+  <a href="https://youtu.be/TWF4HYgWQwY">
+    <img src="https://img.youtube.com/vi/TWF4HYgWQwY/maxresdefault.jpg" alt="NCAtorch Interactive Demo" width="700">
+  </a>
+  <p><em>Click to watch the toolkit demo video</em></p>
+</div>
 
 ## ⚙️ Configuration
 
@@ -124,7 +129,7 @@ DATASET:
     - "🔥"
 ```
 
-💡 **See** [config/](config/) **directory for complete examples of all supported tasks.**
+💡 **See [config] directory for complete examples of all supported tasks.**
 
 ## 🎯 Supported Tasks
 
@@ -176,7 +181,7 @@ For detailed documentation on:
 - Dataset preparation
 - Advanced training techniques
 
-Please refer to the [docs/](docs/) directory (coming soon).
+Please refer to the [docs] directory (coming soon).
 
 ## 📝 Citation
 
