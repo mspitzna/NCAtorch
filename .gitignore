@@ -210,5 +210,9 @@ __marimo__/
 datasets/*
 train_log/*
 !train_log/emoji_conv3x3
+!train_log/emoji_residual3x3
+!train_log/mnist_mse
+!train_log/ot_swirly_conv3x3
+!train_log/e2h_latent
 wandb/*
 .claude/
