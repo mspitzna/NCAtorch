@@ -85,6 +85,8 @@ uvicorn app.fastapi_backend:app
 
 Then open your browser to `http://localhost:8000`
 
+### 📹 Demo Video
+
 <div align="center">
   <a href="https://youtu.be/TWF4HYgWQwY">
     <img src="https://img.youtube.com/vi/TWF4HYgWQwY/maxresdefault.jpg" alt="NCAtorch Interactive Demo" width="700">
