@@ -48,7 +48,7 @@ If your work has improved **NCAtorch** and you would like more people to see it,
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/mspitzna/nca-torch.git
+git clone https://github.com/mspitzna/NCAtorch.git
 cd nca-torch
 ```
 2. (Recommended) Create and activate a virtual environment so the dependencies stay isolated:
