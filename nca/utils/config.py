@@ -33,7 +33,7 @@ class ModelConfig(BaseModel):
     USE_POSITIONAL_EMBEDDINGS: bool = False
     LIVING_MASK: bool = False
     LIVING_MASK_INDEX: int = 3
-    NOISE_INJECTION: float = 0.0 # not used currently
+    NOISE_INJECTION: float = 0.0
     FINAL_ACTIVATION: bool = False
     CLAMP_OUTPUT: bool = False
     FIRE_RATE: float = 0.5
