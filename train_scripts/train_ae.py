@@ -100,19 +100,24 @@ def main():
     print(f"Model Checkpoints: {model_output_folder}")
     print(f"Visualizations: {vis_output_folder}")
 
-    # Initialize wandb
-    wandb.init(
-        project=f"{config.PROJECT_NAME}",
-        name=f"{config.TRAIN_NAME}_{model_type.lower()}",
-        config={
-            "model_type": model_type,
-            "latent_channels": config.LATENT_TRAINING.LATENT_AE_CHANNEL,
-            "compression_level": config.LATENT_TRAINING.LATENT_AE_COMPRESSION,
-            "learning_rate": config.LATENT_TRAINING.LATENT_AE_LR,
-            "steps": config.LATENT_TRAINING.LATENT_AE_STEPS,
-            "warmup_steps": config.LATENT_TRAINING.LATENT_AE_WARMUP_STEPS,
-        }
-    )
+    # Initialize wandb only if enabled
+    use_wandb = getattr(config, 'WANDB', False)
+    if use_wandb:
+        wandb.init(
+            project=f"{config.PROJECT_NAME}",
+            name=f"{config.TRAIN_NAME}_{model_type.lower()}",
+            config={
+                "model_type": model_type,
+                "latent_channels": config.LATENT_TRAINING.LATENT_AE_CHANNEL,
+                "compression_level": config.LATENT_TRAINING.LATENT_AE_COMPRESSION,
+                "learning_rate": config.LATENT_TRAINING.LATENT_AE_LR,
+                "steps": config.LATENT_TRAINING.LATENT_AE_STEPS,
+                "warmup_steps": config.LATENT_TRAINING.LATENT_AE_WARMUP_STEPS,
+            }
+        )
+        print("WandB logging enabled")
+    else:
+        print("WandB logging disabled")
 
     # Prepare dataset
     dataloader, _, h, w = create_dataset(config)
@@ -211,14 +216,15 @@ def main():
         train_loss_kld_acc += kld_loss_val if isinstance(kld_loss_val, float) else kld_loss_val.item()
 
         # Log to wandb every step
-        wandb.log({
-            "loss": loss_dict["total_loss"],
-            "l1_loss": loss_dict["l1_loss"] if "l1_loss" in loss_dict else None,
-            "vgg_loss": loss_dict["vgg_loss"] if "vgg_loss" in loss_dict else None,
-            "kl_loss": kld_loss_val if isinstance(kld_loss_val, float) else kld_loss_val.item(),
-            "learning_rate": lr_scheduler.get_last_lr()[0],
-            "step": i + 1
-        })
+        if use_wandb:
+            wandb.log({
+                "loss": loss_dict["total_loss"],
+                "l1_loss": loss_dict["l1_loss"] if "l1_loss" in loss_dict else None,
+                "vgg_loss": loss_dict["vgg_loss"] if "vgg_loss" in loss_dict else None,
+                "kl_loss": kld_loss_val if isinstance(kld_loss_val, float) else kld_loss_val.item(),
+                "learning_rate": lr_scheduler.get_last_lr()[0],
+                "step": i + 1
+            })
 
         # --- Logging ---
         if (i + 1) % log_interval == 0:
@@ -243,14 +249,15 @@ def main():
             )
 
             # Log images to wandb
-            vis_image_path = os.path.join(vis_output_folder, f"step_{i+1}.png")
-            if vis_result is not None:
-                wandb.log({
-                    "reconstructions": wandb.Image(vis_image_path),
-                    "avg_loss": avg_loss,
-                    "avg_recon_loss": avg_recon_loss,
-                    "avg_kl_loss": avg_kld_loss
-                })
+            if use_wandb:
+                vis_image_path = os.path.join(vis_output_folder, f"step_{i+1}.png")
+                if vis_result is not None:
+                    wandb.log({
+                        "reconstructions": wandb.Image(vis_image_path),
+                        "avg_loss": avg_loss,
+                        "avg_recon_loss": avg_recon_loss,
+                        "avg_kl_loss": avg_kld_loss
+                    })
             
             # Reset accumulators
             train_loss_total_acc = 0.0
@@ -261,7 +268,8 @@ def main():
         if (i + 1) % save_interval == 0:
             save_model(model, i + 1, model_output_folder, model_type)
             # Log model to wandb
-            wandb.save(os.path.join(model_output_folder, f"{model_type.lower()}_{i+1}.pt"))
+            if use_wandb:
+                wandb.save(os.path.join(model_output_folder, f"{model_type.lower()}_{i+1}.pt"))
 
         if i == 0:  # Log initial model shape
             print("--- Initial Model Shape Summary ---")
@@ -287,13 +295,15 @@ def main():
         print(f"Final Output Shape: {outputs.shape}")
 
     # Log final model to wandb
-    #wandb.save(os.path.join(model_output_folder, final_model_name))
-    
+    #if use_wandb:
+    #    wandb.save(os.path.join(model_output_folder, final_model_name))
+
     # Changed FOLDER_NAME to suggest model path for clarity
     print(f"\nConsider adding to your config: LATENT_MODEL_PATH: {os.path.join(model_output_folder, final_model_name)}")
-    
+
     # Finish wandb run
-    wandb.finish()
+    if use_wandb:
+        wandb.finish()
 
 
 if __name__ == "__main__":
