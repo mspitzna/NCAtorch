@@ -12,7 +12,7 @@ class PerceptionConfig(BaseModel):
     @field_validator("MODE")
     @classmethod
     def check_mode(cls, value):
-        valid_modes = ["conv", "attention", "sobel", "deformable_conv", "residual_conv"]
+        valid_modes = ["conv", "attention", "sobel", "deformable_conv", "residual_conv", "mh_attention"]
         if value not in valid_modes:
             raise ValueError(f'mode must be one of {valid_modes}.')
         return value

@@ -9,6 +9,7 @@ from .ca.perceptions import (
     DeformableConvPerception,
     ResidualConvPerception,
     MultiPerception,
+    MultiHeadAttentionPerception
 )
 from nca.core.models.ca.update_models import SimpleMLPUpdate, ResNetUpdate
 from nca.core.models.ca.ca_model import CAModel
@@ -119,6 +120,12 @@ def get_perception(config: Config, cond_dim, device):
                 in_channel=in_channel_n,
                 out_channel=out_channel,
                 kernel_size=kernel_size,
+            )
+        elif mode == "mh_attention":
+            return MultiHeadAttentionPerception(
+                in_channel=in_channel_n,
+                out_channel=out_channel,
+                kernel_size=kernel_size
             )
         elif mode == "sobel":
             return SobelPerception(

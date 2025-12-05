@@ -143,7 +143,7 @@ class SamplePool:
             # Apply replace_after_layer logic: only replace channels after a specific index
             if self.replace_after_layer is not None:
                 # Only replace channels from replace_after_layer onwards
-                print(current_batch_data.shape)
+                #print(current_batch_data.shape)
                 if mutation_replace_indices.numel() > 0:
                     current_batch_data[mutation_replace_indices, self.replace_after_layer:] = mutation_data_pool_samples[:, self.replace_after_layer:]
                 if full_replace_indices.numel() > 0:

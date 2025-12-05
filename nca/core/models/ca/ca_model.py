@@ -199,7 +199,7 @@ class CAModel(nn.Module, ABC):
 
         # 8) Clamp each batch item to keep states within reasonable bounds
         if self.clamp_output:
-            state = torch.clamp(state, min=0.0, max=1.0)
+            state = torch.clamp(state, min=-1.0, max=1.0)
 
         if freeze_channels is not None:
             state = torch.cat([frozen_layers, state], dim=1)

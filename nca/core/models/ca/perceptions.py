@@ -330,6 +330,11 @@ class MultiHeadAttentionPerception(Perception):
         self.proj_conv = nn.Conv2d(embed_dim, out_channel, kernel_size=1)
         self.neighborhood_size = kernel_size * kernel_size
 
+        if in_channel != out_channel:
+            self.input_residual = nn.Conv2d(in_channel, out_channel, kernel_size=1)
+        else:
+            self.input_residual = nn.Identity()
+
         # --- Optional LayerNorm before FFN/Final Activation ---
         if self.use_layer_norm:
             # Apply LayerNorm on the out_channel dimension after attention projection
@@ -394,6 +399,7 @@ class MultiHeadAttentionPerception(Perception):
 
         # 6. Final Attention Projection
         attn_output = self.proj_conv(attended_v) # Shape: (B, out_channel, H, W)
+        attn_output = attn_output + self.input_residual(x)
 
         # --- Optional: Post-Attention LayerNorm & Residual ---
         # Note: Standard Transformers often apply residual connection HERE before FFN
