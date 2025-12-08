@@ -179,6 +179,7 @@ class AttentionPerception(Perception):
         kernel_size=3,  # Defines the local neighborhood size
         num_heads=4,    # Number of attention heads
         slope=0.2,
+        use_rel_pos_bias: bool = True,
     ) -> None:
         super().__init__()
 
@@ -195,6 +196,7 @@ class AttentionPerception(Perception):
         self.padding = kernel_size // 2
         self.scale = self.head_dim ** -0.5
         self.neighborhood_size = kernel_size * kernel_size
+        self.use_rel_pos_bias = use_rel_pos_bias
 
         # Project input to Q, K, V
         self.to_qkv = nn.Conv2d(in_channel, out_channel * 3, kernel_size=1, bias=False)
@@ -204,6 +206,13 @@ class AttentionPerception(Perception):
 
         # Activation
         self.lrelu = nn.LeakyReLU(slope)
+
+        # Relative positional bias to break neighborhood permutation symmetry
+        self.rel_pos_bias = (
+            nn.Parameter(torch.zeros(num_heads, self.neighborhood_size))
+            if use_rel_pos_bias
+            else None
+        )
 
         # Initialize weights for stability
         self._init_weights()
@@ -268,6 +277,9 @@ class AttentionPerception(Perception):
         # (B, num_heads, head_dim, 1, H, W) * (B, num_heads, head_dim, neighborhood_size, H, W)
         # -> sum over head_dim -> (B, num_heads, neighborhood_size, H, W)
         attn_scores = (q * k_local).sum(dim=2) * self.scale
+        if self.rel_pos_bias is not None:
+            bias = self.rel_pos_bias.view(1, self.num_heads, self.neighborhood_size, 1, 1)
+            attn_scores = attn_scores + bias
 
         # Softmax over neighborhood dimension
         attn_weights = F.softmax(attn_scores, dim=2)  # (B, num_heads, neighborhood_size, H, W)
@@ -301,7 +313,8 @@ class MultiHeadAttentionPerception(Perception):
         slope: float = 0.2,
         use_layer_norm: bool = True,
         include_ffn: bool = True, # Flag to include FFN
-        ffn_expand_ratio: int = 4  # How much to expand channels in FFN
+        ffn_expand_ratio: int = 4,  # How much to expand channels in FFN
+        use_rel_pos_bias: bool = True,
     ) -> None:
         super().__init__()
 
@@ -321,6 +334,7 @@ class MultiHeadAttentionPerception(Perception):
         self.scale = self.head_dim ** -0.5
         self.use_layer_norm = use_layer_norm
         self.include_ffn = include_ffn
+        self.use_rel_pos_bias = use_rel_pos_bias
 
         # --- Attention Layers ---
         self.query_conv = nn.Conv2d(in_channel, embed_dim, kernel_size=1, bias=False)
@@ -329,6 +343,13 @@ class MultiHeadAttentionPerception(Perception):
         # Remove unfold - we'll use manual circular padding instead
         self.proj_conv = nn.Conv2d(embed_dim, out_channel, kernel_size=1)
         self.neighborhood_size = kernel_size * kernel_size
+
+        # Relative positional bias so each offset can learn its own weight
+        self.rel_pos_bias = (
+            nn.Parameter(torch.zeros(num_heads, self.neighborhood_size))
+            if use_rel_pos_bias
+            else None
+        )
 
         if in_channel != out_channel:
             self.input_residual = nn.Conv2d(in_channel, out_channel, kernel_size=1)
@@ -390,6 +411,9 @@ class MultiHeadAttentionPerception(Perception):
 
         # 4. Attention Calculation
         attn_scores = (q_reshaped * k_reshaped).sum(dim=2) * self.scale # Sum over head_dim
+        if self.rel_pos_bias is not None:
+            bias = self.rel_pos_bias.view(1, self.num_heads, self.neighborhood_size, 1, 1)
+            attn_scores = attn_scores + bias
         attn_weights = F.softmax(attn_scores, dim=2) # Softmax over neighborhood
         attn_weights_expanded = attn_weights.unsqueeze(2) # Add head_dim dim
 
