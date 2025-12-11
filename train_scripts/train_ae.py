@@ -14,9 +14,9 @@ import wandb
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from nca.data.dataset_factory import create_dataset
 from nca.utils.config import load_config
-from nca.training.training_utils import export_model
+from nca.training.training_utils import create_warmup_cosine_scheduler, export_model
 from nca.utils.visualization import visualize_batch
-from nca.utils.image_utils import create_warmup_cosine_scheduler, make_circle_damage_mask
+from nca.utils.image_utils import make_circle_damage_mask
 from nca.core.models.model_factory import get_latent_encoder
 
 

@@ -10,9 +10,12 @@ from tqdm import tqdm
 from nca.utils.config import Config
 from nca.utils.visualization import save_image
 from nca.training.sample_pool import SamplePool, TimeseriesSamplePool
-from nca.training.training_utils import export_model
+from nca.training.training_utils import (
+    create_warmup_constant_scheduler,
+    create_warmup_cosine_scheduler,
+    export_model,
+)
 from nca.training.logger import Logger
-from nca.utils.image_utils import create_warmup_cosine_scheduler
 from nca.core.models.latent_wrapper import LatentWrapper
 
 
@@ -77,7 +80,7 @@ class BaseTrainer(ABC):
         self._initialize_additional_components()  # Hook for children
 
     def _initialize_base_optimizers(self):
-        """Initialize models, optimizers, and schedulers with warmup + cosine decay for 'exp' mode."""
+        """Initialize models, optimizers, and schedulers."""
         self.optimizer = optim.Adam(
             self.ca_model.parameters(),
             lr=self.config.TRAINING.LEARNING_RATE,  # Base LR (peak LR after warmup)
@@ -108,8 +111,19 @@ class BaseTrainer(ABC):
             self.lr_scheduler = create_warmup_cosine_scheduler(
                 self.optimizer, warmup_steps=warmup_steps, total_steps=total_steps
             )
+        elif self.config.TRAINING.LR_SCHEDULE_MODE == "constant":
+            warmup_steps = self.config.TRAINING.WARMUP_STEPS
+
+            print(
+                f"Using LambdaLR scheduler with linear warmup for {warmup_steps} steps "
+                "followed by constant learning rate."
+            )
+
+            self.lr_scheduler = create_warmup_constant_scheduler(
+                self.optimizer, warmup_steps=warmup_steps
+            )
         else:
-            raise ValueError("Invalid LR_SCHEDULE_MODE. Must be 'step' or 'cosine'.")
+            raise ValueError("Invalid LR_SCHEDULE_MODE. Must be 'step', 'cosine', or 'constant'.")
 
     def _evolve(self, state_in, conds, iter_n, freeze_channels=None, logging=False):
         """Evolves the CA model on the given state (image x or latent z)."""

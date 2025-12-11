@@ -104,8 +104,8 @@ class TrainingConfig(BaseModel):
     @field_validator("LR_SCHEDULE_MODE")
     @classmethod
     def check_lr_schedule_mode(cls, value):
-        if value not in ["step", "cosine"]:
-            raise ValueError('LR_SCHEDULE_MODE  must be "step" or "cosine".')
+        if value not in ["step", "cosine", "constant"]:
+            raise ValueError('LR_SCHEDULE_MODE  must be "step", "cosine" or "constant".')
         return value
 
     @field_validator("BATCH_SIZE")

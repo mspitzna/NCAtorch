@@ -3,7 +3,7 @@ import torch.nn as nn
 import wandb
 from nca.training.trainers.base_trainer import BaseTrainer # Assuming this is your original BaseTrainer file
 from nca.core.models.critic import Critic
-from nca.utils.image_utils import create_warmup_cosine_scheduler
+from nca.training.training_utils import create_warmup_cosine_scheduler
 from nca.core.losses.loss_functions import LPIPSLoss, ReconstructionLoss, L1Loss
 
 class AdversarialTrainer(BaseTrainer):
