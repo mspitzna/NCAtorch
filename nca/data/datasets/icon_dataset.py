@@ -1,10 +1,11 @@
+import io
+
 import numpy as np
+import PIL.Image
+import requests
 import torch
 import torch.nn.functional as F
 from torch.utils.data import Dataset
-import requests
-import io
-import PIL.Image
 
 
 class IconDataset(Dataset):
@@ -95,9 +96,23 @@ class IconDataset(Dataset):
     
 
 def load_image(url, max_size=None):
-    r = requests.get(url)
-    img = PIL.Image.open(io.BytesIO(r.content))
-    img = img.resize((max_size, max_size), PIL.Image.LANCZOS)
+    try:
+        r = requests.get(url, timeout=10)
+        r.raise_for_status()
+    except Exception as e:
+        raise RuntimeError(f"Failed to download emoji from {url}") from e
+
+    try:
+        img = PIL.Image.open(io.BytesIO(r.content)).convert("RGBA")
+    except PIL.Image.UnidentifiedImageError as e:
+        content_type = r.headers.get("content-type", "unknown")
+        raise RuntimeError(
+            f"Downloaded emoji from {url} is not a valid image (content-type: {content_type})"
+        ) from e
+
+    if max_size is not None:
+        img = img.resize((max_size, max_size), PIL.Image.LANCZOS)
+
     img = np.float32(img) / 255.0
     # premultiply RGB by Alpha
     img[..., :3] *= img[..., 3:]
@@ -111,9 +126,9 @@ def make_seed(size, channel_n):
 
 
 def load_emoji(emoji, target_size=128):
-    code = hex(ord(emoji))[2:].lower()
+    codepoints = "_".join(hex(ord(char))[2:] for char in emoji)
     url = (
-        "https://github.com/googlefonts/noto-emoji/blob/main/png/512/emoji_u%s.png?raw=true"
-        % code
+        "https://raw.githubusercontent.com/googlefonts/noto-emoji/main/png/512/emoji_u%s.png"
+        % codepoints
     )
     return load_image(url, target_size)
