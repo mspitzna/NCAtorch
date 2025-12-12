@@ -62,13 +62,13 @@ class SamplePool:
             is_nan = torch.isnan(data_i).any()
             is_all_zero = torch.all(data_i == 0) # Check if relevant for latents too
 
-            # Optional: Add back magnitude check if needed, applied to data_i
-            # is_too_large = False
-            # if self.max_pool_value_threshold is not None:
-            #    max_abs_val = torch.inf if is_nan else torch.abs(data_i).max()
-            #    is_too_large = max_abs_val > self.max_pool_value_threshold
+            # check if data is infinitely large
+            if ~torch.isfinite(data_i).all() or data_i.abs().max() > 2:
+                is_too_large = True
+            else:
+                is_too_large = False
 
-            if not is_nan and not is_all_zero: # and not is_too_large:
+            if not is_nan and not is_all_zero and not is_too_large:
                 valid_indices.append(i)
 
         if not valid_indices: 

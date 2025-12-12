@@ -1,6 +1,7 @@
 import os
 import shutil
 from datetime import datetime
+import yaml
 import numpy as np
 import wandb
 import torch
@@ -24,11 +25,28 @@ class Logger:
         if self.use_wandb:
             # If using pydantic, you might use config.model_dump(), else use __dict__
             flat_config = config.model_dump() if hasattr(config, "model_dump") else config.__dict__
-            wandb.init(project=config.PROJECT_NAME, name=config.TRAIN_NAME, config=flat_config)
+            if wandb.run is None:
+                wandb.init(project=config.PROJECT_NAME, name=config.TRAIN_NAME, config=flat_config)
+            else:
+                wandb.config.update(flat_config, allow_val_change=True)
 
             if model is not None:
                 wandb.watch(model, log="all", log_freq=self.config.TRAINING.LOG_INTERVAL)
         
+        # Persist the actual in-memory config (after overrides) into the output folder.
+        # mode="json" coerces Paths to strings for YAML serialization.
+        config_dump = config.model_dump(mode="json", exclude_none=True)
+        used_config_path = os.path.join(self.output_folder, "config.yaml")
+        with open(used_config_path, "w", encoding="utf-8") as f:
+            yaml.safe_dump(config_dump, f, sort_keys=False)
+
+        # Also store the raw wandb config (what the sweep/agent provided) for auditability.
+        if self.use_wandb and wandb.run is not None:
+            wb_cfg = wandb.config.as_dict()
+            wandb_config_path = os.path.join(self.output_folder, "wandb_config.yaml")
+            with open(wandb_config_path, "w", encoding="utf-8") as f:
+                yaml.safe_dump(wb_cfg, f, sort_keys=False)
+
         Logger._instance = self
 
     @staticmethod

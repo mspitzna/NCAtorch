@@ -3,6 +3,7 @@ import os
 import sys
 import argparse
 import time
+import yaml
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from nca.core.models.model_factory import create_model
@@ -31,8 +32,79 @@ def parse_args():
         type=str, default=None,
         help="Path to the folder containing training data"
     )
+    parser.add_argument(
+        "--sweep",
+        action="store_true",
+        help="Enable wandb sweep mode: init wandb early and apply wandb.config overrides."
+    )
+    parser.add_argument(
+        "-o", "--override",
+        action="append",
+        default=[],
+        help="Override config values with dot-path syntax, e.g. TRAINING.LEARNING_RATE=0.001"
+    )
 
     return parser.parse_args()
+
+
+def _set_by_path(cfg_dict, key_path, value):
+    """Set nested value in a dict using dot-delimited keys."""
+    keys = key_path.split(".")
+    d = cfg_dict
+    for k in keys[:-1]:
+        if k not in d or not isinstance(d[k], dict):
+            d[k] = {}
+        d = d[k]
+    d[keys[-1]] = value
+
+
+def _flatten_dict(d, parent_key=""):
+    """Flatten nested dict into dot-delimited keys."""
+    items = {}
+    for k, v in d.items():
+        new_key = f"{parent_key}.{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.update(_flatten_dict(v, new_key))
+        else:
+            items[new_key] = v
+    return items
+
+
+def apply_overrides(config, overrides: dict):
+    """Return a new Config with overrides applied (validated by pydantic)."""
+    if not overrides:
+        return config
+    # Drop None fields to avoid re-validating optional paths as Path(None)
+    cfg_dict = config.model_dump(exclude_none=True)
+    # Only allow overrides that exist in the current config structure to avoid pydantic errors
+    existing_paths = set(_flatten_dict(cfg_dict).keys())
+    filtered = {}
+    for k, v in overrides.items():
+        if k in existing_paths:
+            filtered[k] = v
+        else:
+            print(f"[override] Skipping unknown key '{k}' (not in config).")
+    overrides = filtered
+    if not overrides:
+        return config
+    for key, value in overrides.items():
+        _set_by_path(cfg_dict, key, value)
+    return config.__class__(**cfg_dict)
+
+
+def parse_override_strings(override_items):
+    """Parse CLI override strings into a dict."""
+    parsed = {}
+    for item in override_items:
+        if "=" not in item:
+            raise ValueError(f"Override must be KEY=VALUE, got: {item}")
+        key, raw_val = item.split("=", 1)
+        try:
+            val = yaml.safe_load(raw_val)
+        except Exception:
+            val = raw_val
+        parsed[key] = val
+    return parsed
 
 
 def main():
@@ -55,10 +127,33 @@ def main():
             sys.exit(1)
         print(f"Loading config from: {args.config}")
         config = load_config(args.config)
-    
+
+    # Apply CLI overrides (before device / wandb overrides)
+    cli_overrides = parse_override_strings(args.override)
+    config = apply_overrides(config, cli_overrides)
+
     # if device is set per args, update config
     if args.device:
         config = config.model_copy(update={"DEVICE": args.device})
+
+    # If running a wandb sweep, init wandb early and apply sweep overrides
+    use_sweep = args.sweep or os.environ.get("WANDB_SWEEP") == "1"
+    if use_sweep:
+        import wandb
+        # Ensure wandb logging is on for sweeps
+        if not config.WANDB:
+            config = config.model_copy(update={"WANDB": True})
+        base_cfg = config.model_dump(exclude_none=True)
+        wandb.init(
+            project=config.PROJECT_NAME,
+            name=config.TRAIN_NAME,
+            config=base_cfg,
+        )
+        # Convert wandb config to plain dict, drop private keys, then flatten for dot-path overrides
+        sweep_cfg = wandb.config.as_dict()
+        sweep_cfg = {k: v for k, v in sweep_cfg.items() if not str(k).startswith("_")}
+        sweep_overrides = _flatten_dict(sweep_cfg)
+        config = apply_overrides(config, sweep_overrides)
 
     # Prepare dataset
     dataloader, cond_dim, im_height, im_width = create_dataset(config)
