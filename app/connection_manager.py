@@ -25,15 +25,15 @@ class ConnectionManager:
         if h > max_size or w > max_size:
             scale = max_size / max(h, w)
             new_h, new_w = int(h * scale), int(w * scale)
+            # Resize using numpy/cv2 would be faster, but PIL is simpler
             image_pil = Image.fromarray(current_input_image).convert("RGB")
-            # Use BILINEAR for faster resizing (LANCZOS is slower but higher quality)
-            image_pil = image_pil.resize((new_w, new_h), Image.BILINEAR)
-        else:
-            image_pil = Image.fromarray(current_input_image).convert("RGB")
+            image_pil = image_pil.resize((new_w, new_h), Image.Resampling.NEAREST)
+            current_input_image = np.array(image_pil)
 
-        with io.BytesIO() as buffered:
-            # Adjust quality based on image size for faster encoding
-            quality = 75 if h > max_size or w > max_size else 100
-            image_pil.save(buffered, format="JPEG", quality=quality, optimize=False)
-            img_bytes = buffered.getvalue()
+        # Send raw RGB data with dimensions header
+        # Format: 4 bytes width + 4 bytes height + raw RGB data
+        h, w = current_input_image.shape[:2]
+        header = w.to_bytes(4, 'little') + h.to_bytes(4, 'little')
+        img_bytes = header + current_input_image.tobytes()
+
         await self.broadcast_binary(img_bytes)

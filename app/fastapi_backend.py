@@ -25,6 +25,27 @@ from app.ca_handler import CaHandler
 from app.tools.brushes import delete_brush, paint_brush
 
 # ========================
+# Device Configuration
+# ========================
+def get_device_preference():
+    """Get device preference from environment variable."""
+    device = os.environ.get("NCA_DEVICE", None)
+
+    # If device is set to cpu, hide CUDA devices
+    if device == "cpu":
+        os.environ["CUDA_VISIBLE_DEVICES"] = ""
+        print("NCA_DEVICE=cpu: Hiding CUDA devices")
+
+    if device:
+        print(f"Device preference from NCA_DEVICE: {device}")
+    else:
+        print("No device preference set (will auto-detect)")
+
+    return device
+
+PREFERRED_DEVICE = get_device_preference()
+
+# ========================
 # Global Constants & Configurations
 # ========================
 TRAINLOG_ROOT = "./train_log"
@@ -60,8 +81,9 @@ random_changes_event = asyncio.Event()
 # ========================
 log_path = "./train_log/emoji_conv3x3"  # Adjust as needed
 current_model_folder = "emoji_conv3x3"  # Track the current model folder
-ca_handler = CaHandler()
+ca_handler = CaHandler(device_preference=PREFERRED_DEVICE)
 config = ca_handler.load_model(log_path)
+print(f"✓ Model loaded on device: {config.DEVICE}")
 IMG_SIZE, COLOR_DIM, COND_DIM, x_tensor, current_input_image, cond = ca_handler.get_initial_data()
 
 state_handler = StateHandler(config, IMG_SIZE, COLOR_DIM, COND_DIM)
@@ -135,10 +157,14 @@ async def apply_ca_changes():
     import time
     last_log_time = time.time()
     frame_times = []
+    timing_breakdown = {'forward': [], 'convert': [], 'broadcast': []}
 
     while random_changes_event.is_set():
         loop_start = time.time()
-        await asyncio.sleep(state_handler.get_speed())
+        # Only sleep if speed setting requires it (don't sleep for high FPS)
+        sleep_time = state_handler.get_speed()
+        if sleep_time > 0.001:  # Only sleep if > 1ms
+            await asyncio.sleep(sleep_time)
 
         with state_handler.get_lock():
             x_tensor = state_handler.get_img_tensor().clone().detach()
@@ -147,15 +173,19 @@ async def apply_ca_changes():
             config = state_handler.get_config()
             color_dim = state_handler.get_color_dim()
 
-        # Adaptive broadcast interval based on image size
+        # Adaptive broadcast interval based on image size and speed
         img_size = x_tensor.shape[-1] * x_tensor.shape[-2]
-        if img_size > 512 * 512:
-            broadcast_interval = 10  # Skip more frames for very large images
-        elif img_size > 256 * 256:
-            broadcast_interval = 4  # Moderate skipping for medium images
-        else:
-            broadcast_interval = 1
+        speed = state_handler.get_speed()
 
+        # Aggressive frame skipping to compensate for slow encoding
+        # Skip more frames to maintain responsiveness
+        if img_size > 512 * 512:
+            broadcast_interval = 4  # Every 4th frame for very large images
+        else:
+            broadcast_interval = 2  # Every 2nd frame for 512x512 to compensate for encoding time
+
+        # Time the forward pass
+        t0 = time.time()
         x_tensor_gpu, x_latent_gpu = await asyncio.to_thread(
             ca_handler.forward, x_tensor, cond_tensor
         )
@@ -167,8 +197,13 @@ async def apply_ca_changes():
         else:
             x_display_cpu = await asyncio.to_thread(_to_cpu_detached, x_tensor_gpu)
             x_latent_cpu = None
+        t1 = time.time()
+        timing_breakdown['forward'].append((t1 - t0) * 1000)
 
+        # Time the image conversion
         img = await asyncio.to_thread(convert_to_img, x_display_cpu, config, color_dim)
+        t2 = time.time()
+        timing_breakdown['convert'].append((t2 - t1) * 1000)
 
         with state_handler.get_lock():
             if config.LATENT_TRAINING.ENABLED:
@@ -183,7 +218,11 @@ async def apply_ca_changes():
         frame_counter += 1
         if frame_counter >= broadcast_interval:
             await manager.broadcast_image(img_for_broadcast)
+            t3 = time.time()
+            timing_breakdown['broadcast'].append((t3 - t2) * 1000)
             frame_counter = 0
+        else:
+            timing_breakdown['broadcast'].append(0)  # Frame skipped
 
         # Performance monitoring
         loop_time = time.time() - loop_start
@@ -191,8 +230,21 @@ async def apply_ca_changes():
         if time.time() - last_log_time > 5.0:  # Log every 5 seconds
             avg_time = sum(frame_times) / len(frame_times)
             actual_fps = 1.0 / avg_time if avg_time > 0 else 0
-            print(f"Performance: {actual_fps:.1f} FPS (avg frame time: {avg_time*1000:.1f}ms, image size: {x_tensor.shape[-2]}x{x_tensor.shape[-1]})")
+
+            # Calculate average timings
+            avg_forward = sum(timing_breakdown['forward']) / len(timing_breakdown['forward'])
+            avg_convert = sum(timing_breakdown['convert']) / len(timing_breakdown['convert'])
+            broadcast_times = [t for t in timing_breakdown['broadcast'] if t > 0]
+            avg_broadcast = sum(broadcast_times) / len(broadcast_times) if broadcast_times else 0
+
+            device_info = config.DEVICE
+            broadcast_fps = len(broadcast_times) / 5.0  # broadcasts per second
+            print(f"Performance: {actual_fps:.1f} FPS (total: {avg_time*1000:.1f}ms) | "
+                  f"Forward: {avg_forward:.1f}ms | Convert: {avg_convert:.1f}ms | "
+                  f"Broadcast: {avg_broadcast:.1f}ms ({broadcast_fps:.1f} fps) | Device: {device_info} | Image: {x_tensor.shape[-2]}x{x_tensor.shape[-1]}")
+
             frame_times = []
+            timing_breakdown = {'forward': [], 'convert': [], 'broadcast': []}
             last_log_time = time.time()
 
 

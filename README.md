@@ -85,6 +85,20 @@ uvicorn app.fastapi_backend:app
 
 Then open your browser to `http://localhost:8000`
 
+### Device Selection
+
+By default, the UI auto-detects and uses CUDA when available, falling back to MPS (on macOS) or CPU. To force a specific device:
+
+```bash
+# Force CPU execution (also hides CUDA devices from the process)
+NCA_DEVICE=cpu uvicorn app.fastapi_backend:app
+
+# Use specific CUDA device
+NCA_DEVICE=cuda:0 uvicorn app.fastapi_backend:app
+```
+
+**Note:** Setting `NCA_DEVICE=cpu` will also hide CUDA devices from the server process to prevent any GPU contexts from being created.
+
 ### 📹 Demo Video
 
 <div align="center">

@@ -189,19 +189,98 @@
 
   const socket = new WebSocket(`ws://${window.location.host}/ws`);
 
+  // Frame skipping: Only process latest frame
+  let latestImageBlob = null;
+  let isRendering = false;
+  let framesReceived = 0;
+  let framesRendered = 0;
+  let framesSkipped = 0;
+  let lastStatsTime = Date.now();
+
   socket.onopen = () => console.log("WebSocket connected");
   socket.onmessage = (event) => {
     if (event.data instanceof Blob) {
-      const img = new Image();
-      const url = URL.createObjectURL(event.data);
-      img.src = url;
-      img.onload = () => {
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        URL.revokeObjectURL(url);
-      };
+      framesReceived++;
+
+      // Store the latest frame, discarding old ones if still rendering
+      if (latestImageBlob !== null) {
+        framesSkipped++; // We're replacing an unrendered frame
+      }
+      latestImageBlob = event.data;
+
+      // If not currently rendering, start rendering
+      if (!isRendering) {
+        renderNextFrame();
+      }
+
+      // Log performance stats every 5 seconds
+      const now = Date.now();
+      if (now - lastStatsTime > 5000) {
+        const elapsed = (now - lastStatsTime) / 1000;
+        console.log(`Performance: Received ${(framesReceived/elapsed).toFixed(1)} fps, Rendered ${(framesRendered/elapsed).toFixed(1)} fps, Skipped ${framesSkipped} frames`);
+        framesReceived = 0;
+        framesRendered = 0;
+        framesSkipped = 0;
+        lastStatsTime = now;
+      }
     }
   };
   socket.onclose = () => console.log("WebSocket disconnected");
+
+  async function renderNextFrame() {
+    if (!latestImageBlob) {
+      isRendering = false;
+      return;
+    }
+
+    isRendering = true;
+    const blobToRender = latestImageBlob;
+    latestImageBlob = null; // Clear the queue
+
+    try {
+      // Read raw RGB data from blob
+      const arrayBuffer = await blobToRender.arrayBuffer();
+      const dataView = new DataView(arrayBuffer);
+
+      // Read dimensions from header (4 bytes each, little endian)
+      const width = dataView.getUint32(0, true);
+      const height = dataView.getUint32(4, true);
+
+      // Read RGB data
+      const rgbData = new Uint8ClampedArray(arrayBuffer, 8);
+
+      // Create ImageData and draw to canvas
+      const imageData = new ImageData(width, height);
+      for (let i = 0; i < width * height; i++) {
+        imageData.data[i * 4] = rgbData[i * 3];     // R
+        imageData.data[i * 4 + 1] = rgbData[i * 3 + 1]; // G
+        imageData.data[i * 4 + 2] = rgbData[i * 3 + 2]; // B
+        imageData.data[i * 4 + 3] = 255;              // A
+      }
+
+      requestAnimationFrame(() => {
+        // Create temporary canvas to draw ImageData, then scale to main canvas
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = width;
+        tempCanvas.height = height;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.putImageData(imageData, 0, 0);
+
+        ctx.drawImage(tempCanvas, 0, 0, canvas.width, canvas.height);
+        framesRendered++;
+
+        // Check if there's a newer frame waiting
+        if (latestImageBlob) {
+          renderNextFrame();
+        } else {
+          isRendering = false;
+        }
+      });
+    } catch (error) {
+      console.error('Error rendering frame:', error);
+      isRendering = false;
+    }
+  }
 
   // Control buttons
   document

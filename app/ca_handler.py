@@ -9,17 +9,22 @@ from nca.core.models.model_factory import get_latent_encoder
 
 
 class CaHandler:
-    def __init__(self):
+    def __init__(self, device_preference=None):
         self.config = None
         self.dataloader = None
         self.ca_model = None
+        self.device_preference = device_preference
 
     def load_model(self, log_path: str) -> Config:
         self.config = load_config(os.path.join(log_path, "config.yaml"))
 
-        # Use GPU if available for better performance
-        device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
-        print(f"Using device: {device}")
+        # Use device preference if set, otherwise auto-detect
+        if self.device_preference:
+            device = self.device_preference
+            print(f"Using device (from preference): {device}")
+        else:
+            device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
+            print(f"Using device (auto-detected): {device}")
 
         self.config = self.config.model_copy(
             update={
@@ -64,10 +69,12 @@ class CaHandler:
             if self.config.MODEL.LIVING_MASK is True
             else data[2].shape[1]
         )  # TODO Check this
-        x_tensor = sample.clone().detach()
+        # Return tensors on CPU for state storage (will be moved to device during forward pass)
+        x_tensor = sample.clone().detach().cpu()
         current_input_image = (
-            sample[0, :3].squeeze(0).numpy().transpose(1, 2, 0) * 255
+            sample[0, :3].squeeze(0).cpu().numpy().transpose(1, 2, 0) * 255
         ).astype(np.uint8)
+        cond = cond.cpu() if cond is not None else None
         return (
             IMG_SIZE,
             COLOR_DIM,
@@ -78,7 +85,7 @@ class CaHandler:
         )
 
     def get_condition_tensor(self, idx):
-        return self.dataloader.get_dataset().get_condition_tensor(idx).unsqueeze(0)
+        return self.dataloader.get_dataset().get_condition_tensor(idx).unsqueeze(0).cpu()
 
     def get_dataset(self):
         return self.dataloader.get_dataset()
