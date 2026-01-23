@@ -45,14 +45,10 @@ class CaHandler:
         self.ca_model.eval()
 
         if self.config.LATENT_TRAINING.ENABLED:
-            self.ae, reconstruction_criterion, vae_kl_beta = get_latent_encoder(self.config, "cpu")
-
-            # Load AE weights
-            print(f"Loading AutoEncoder weights from {log_path}")
+            self.ae, _, _ = get_latent_encoder(self.config, "cpu", inference_only=True)
 
             default_ae_path = os.path.join(log_path, "ae_checkpoints", "ae.pt" if self.config.LATENT_TRAINING.ENCODER_TYPE == "AE" else "vae.pt")
-            self.ae.load_state_dict(torch.load(default_ae_path, weights_only=True))
-            print(f"Loaded AutoEncoder weights from {default_ae_path}")
+            self.ae.load_state_dict(torch.load(default_ae_path, weights_only=True, map_location=device))
             self.ae.eval()
             self.ae.to(self.config.DEVICE)
 

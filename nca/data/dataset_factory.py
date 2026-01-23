@@ -151,7 +151,7 @@ def create_dataset(config: Config, train=True):
         dataset = CFGDatasetWrapper(dataset, cfg_dropout_prob, null_condition_type, preserve_channels)
 
     dataloader = DataLoader(
-        dataset, batch_size=config.TRAINING.BATCH_SIZE, shuffle=True, num_workers=config.DATASET.NUM_WORKERS, pin_memory=True, drop_last=config.DATASET.DROP_LAST_BATCH
+        dataset, batch_size=config.TRAINING.BATCH_SIZE, shuffle=True, num_workers=config.DATASET.NUM_WORKERS, pin_memory=True, drop_last=config.DATASET.DROP_LAST_BATCH if train else False
     )
     handler = DataWrapper(dataloader, config)
     return handler, cond_dim, im_height, im_width
