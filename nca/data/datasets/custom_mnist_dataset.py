@@ -30,11 +30,10 @@ class CustomMNISTDataset(Dataset):
                     [255, 255, 255],  # This is the default for digits.
                 ],
                 dtype=torch.float32,
-                device="cuda",
+                device=device,
             )
             / 255.0
         )
-        self.color_lookup = self.color_lookup.to(device)
         self.device = device
 
     def __len__(self):
