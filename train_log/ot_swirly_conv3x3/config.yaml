@@ -39,7 +39,7 @@ TRAINING:
 
 DATASET:
   NAME: "ot"                            # Name of the dataset [emoji, e2h, mnist]
-  DATASET_SAMPLE_PATH: "./datasets/dtd-r1.0.1/dtd/images/swirly/swirly_0066.jpg"
+  DATASET_SAMPLE_PATH: "./train_log/ot_swirly_conv3x3/swirly_0066.jpg"
   TARGET_SIZE: 168
 
 PATTERN_POOL:
