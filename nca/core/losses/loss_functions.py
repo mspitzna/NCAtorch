@@ -221,14 +221,28 @@ class PixelCrossEntropyLoss(Loss):
         self.loss_fn = nn.CrossEntropyLoss(reduction=reduction)
 
     def forward(self, predictions, targets):
-        # Ensure predictions and targets have compatible shapes
-        assert predictions.shape == targets.shape, "predictions and targets must have the same shape."
+        """
+        Compute pixel-wise cross-entropy loss.
 
-        # Convert targets to class indices if they are one-hot encoded
-        class_indices = torch.argmax(targets, dim=1)  # Shape: [batch_size, height, width]
+        Args:
+            predictions: [B, num_classes, H, W] - raw logits for each class per pixel
+            targets: [B, num_classes, H, W] - one-hot encoded targets
+                     OR [B, H, W] - class indices
 
-        # Compute the cross-entropy loss per pixel
-        loss_value = self.loss_fn(predictions, class_indices)  # Applies reduction as specified
+        Returns:
+            dict: Dictionary containing the total loss and cross-entropy loss
+        """
+        # Convert one-hot targets to class indices if needed
+        if targets.dim() == 4 and targets.shape[1] > 1:
+            # One-hot encoded: [B, C, H, W] -> [B, H, W]
+            class_indices = torch.argmax(targets, dim=1)
+        else:
+            # Already class indices: [B, H, W] or [B, 1, H, W]
+            class_indices = targets.squeeze(1) if targets.dim() == 4 else targets
+
+        # predictions should have shape [B, num_classes, H, W]
+        # CrossEntropyLoss expects: input=[B, C, H, W], target=[B, H, W]
+        loss_value = self.loss_fn(predictions, class_indices)
 
         return {"total_loss": loss_value, "cross_entropy_loss": loss_value}
 

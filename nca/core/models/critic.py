@@ -25,6 +25,9 @@ class MiniBatchStdDev(nn.Module):
     def forward(self, x):
         N, C, H, W = x.shape
         group_size = min(N, self.group_size)
+        # Ensure group_size divides N to avoid view errors (e.g., batch_size not multiple of 4)
+        if N % group_size != 0:
+            group_size = N
         
         # Reshape to [G, M, C, H, W] where G=group_size, M=N/G
         # Note: C // self.num_new_features requires C to be divisible by num_new_features

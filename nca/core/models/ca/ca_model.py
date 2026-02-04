@@ -2,39 +2,28 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from abc import ABC
-from .perceptions import ConvPerception
+import warnings
+
+from .state_updates import (
+    ApplyDelta,
+    StateUpdatePipeline,
+)
+
 
 class CAModel(nn.Module, ABC):
     def __init__(
         self,
-        channel_n=16,
-        channel_out=16,
-        cond_channel_n=0,
-        fire_rate=0.5,
         device="cpu",
         use_positional_embeddings=False,
         img_height=32,
         img_width=32,
         perception_module=None,
-        perception_params=None,
         update_model_module=None,
-        living_mask=False,
-        living_mask_indice=3,
-        noise_injection=0.0,
-        clamp_output=False,
-        **kwargs,
+        state_update_pipeline=None,
     ):
         super().__init__()
-        self.channel_n = channel_n
-        self.channel_out = channel_out
-        self.fire_rate = fire_rate
         self.device = device
         self.use_positional_embeddings = use_positional_embeddings
-        self.cond_channel_n = cond_channel_n
-        self.living_mask = living_mask
-        self.living_mask_indice = living_mask_indice
-        self.noise_injection = noise_injection
-        self.clamp_output = clamp_output
 
         # Learnable Positional Embeddings
         if self.use_positional_embeddings:
@@ -52,15 +41,20 @@ class CAModel(nn.Module, ABC):
             self.positional_embeddings = None
 
         # Initialize the perception module
-        self.perception_params = (
-            perception_params if perception_params is not None else {}
-        )
-        self.perception = self._build_perception(
-            perception_module, **self.perception_params
-        )
+        self.perception = perception_module
 
         # Initialize the delta model
         self.update_model = update_model_module
+
+        # Initialize state update pipeline
+        if state_update_pipeline is None:
+            warnings.warn(
+                "No state_update_pipeline provided; using default ApplyDelta-only pipeline.",
+                stacklevel=2,
+            )
+            self.state_updater = self._build_default_state_updater()
+        else:
+            self.state_updater = state_update_pipeline
 
         self._init_weights()
 
@@ -85,42 +79,11 @@ class CAModel(nn.Module, ABC):
             if last_conv.bias is not None:
                 torch.nn.init.normal_(last_conv.bias, mean=0.0, std=1e-3)
 
-    def _call_update_model(self, x, current_state=None):
-        """
-        Call the update model with the input tensor x.
-        For ReversibleUpdate, also pass the current state if available.
-        x: [batch, dim, height, width] (perception vector)
-        current_state: [batch, channel_out, height, width] (optional, for reversible updates)
-        Returns: dx: [batch, channel_out, height, width]
-        """
-        # Check if this is a PathInvertibleCA that needs current state
-        if hasattr(self.update_model, '__class__') and 'PathInvertibleCA' in self.update_model.__class__.__name__:
-            if current_state is not None:
-                return self.update_model(x, current_state)
-        
-        # Standard update model call
-        return self.update_model(x)
+    def _build_default_state_updater(self):
+        updaters = []
+        updaters.append(ApplyDelta())
+        return StateUpdatePipeline(updaters)
 
-    def _build_perception(self, perception_module, **perception_params):
-        """Abstract method for building the perception module."""
-        if perception_module is not None:
-            return perception_module
-        else:
-            in_channel_n = (
-                self.channel_n + self.cond_channel_n + 2
-                if self.use_positional_embeddings
-                else self.channel_n + self.cond_channel_n
-            )
-            print(
-                f"ConvPerception with in_channel_n: {in_channel_n}, out_channel: 80, kernel_size: 3"
-            )
-            return ConvPerception(
-                in_channel_n,
-                80,
-                3,
-                self.device,
-                **perception_params,
-            )
 
     def _prepare_input(self, x, cond):
         """
@@ -152,12 +115,13 @@ class CAModel(nn.Module, ABC):
         return x
 
     def forward(self, x, cond=None, step_size=1.0, freeze_channels=None, return_residuals=False):
+        original_state_full = x
+        frozen_layers = None
         if freeze_channels is not None:
             frozen_layers, state = x[:, :freeze_channels + 1].clone(), x[:, freeze_channels + 1:].clone()
         else:
             state = x.clone()  # No channels are frozen
 
-        pre_life_mask = self.get_living_mask(x) if self.living_mask else None
         # 1) Prepare the input
         x = self._prepare_input(x, cond)
 
@@ -168,49 +132,21 @@ class CAModel(nn.Module, ABC):
             grads = self.perception(x)
 
         # 3) Concatenate current state + grads, then pass through dmodel
-        dx = self._call_update_model(grads, state) * step_size
+        dx = self.update_model(grads) * step_size
 
-        # 4) Add noise to the update
-        if self.noise_injection > 0.0:
-            noise = torch.randn_like(dx) * self.noise_injection
-            dx = dx + noise
-
-        # 5) Randomly mask updates (fire_rate)
-        if self.fire_rate < 1.0:
-            update_mask = (torch.rand_like(x[:, :1, :, :]) <= self.fire_rate).float()
-            dx = dx * update_mask
-
-        # 6) Update the state using masked dx
-        state = state + dx
-
-        # 7) If using a living mask, apply it after the update
-        if self.living_mask:
-            if freeze_channels is not None:
-                post_life_mask = self.get_living_mask(torch.cat([frozen_layers, state], dim=1))
-            else:
-                post_life_mask = self.get_living_mask(state)
-            life_mask = pre_life_mask & post_life_mask
-
-            # Expand life_mask to match [B, channel_n, H, W]
-            life_mask = life_mask.unsqueeze(1)  # -> [B, 1, H, W]
-            life_mask = life_mask.expand(-1, dx.size(1), -1, -1)  # -> [B, channel_n, H, W]
-
-            state = state * life_mask.float()  # Apply the living mask to the update
-
-        # 8) Clamp each batch item to keep states within reasonable bounds
-        if self.clamp_output:
-            state = torch.clamp(state, min=-1.0, max=1.0)
+        # 4) Apply update pipeline (noise, fire-rate, add, living mask, clamp, etc.)
+        state, dx = self.state_updater(
+            state,
+            dx,
+            original_state=original_state_full,
+            frozen_layers=frozen_layers,
+        )
 
         if freeze_channels is not None:
             state = torch.cat([frozen_layers, state], dim=1)
         if return_residuals:
             return state, dx
         return state
-
-    def get_living_mask(self, x):
-        """Get the living mask based on the alpha channel."""
-        alpha = x[:, self.living_mask_indice, :, :]
-        return F.max_pool2d(alpha, kernel_size=3, stride=1, padding=1) > 0.1
 
     def _perception_with_positional_embeddings(self, x):
         """Generate positional embeddings and pass them only to perception."""
@@ -220,7 +156,7 @@ class CAModel(nn.Module, ABC):
             [x, self.positional_embeddings.expand(x.shape[0], -1, -1, -1) * constrained_scaling], dim=1
         )
         return self.perception(x_pos_emb)
-    
+
     def get_positional_embeddings(self):
         """Get the learnable positional embeddings."""
         return self.positional_embeddings

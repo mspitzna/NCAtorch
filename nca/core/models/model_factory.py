@@ -11,6 +11,14 @@ from .ca.perceptions import (
     MultiPerception,
     MultiHeadAttentionPerception
 )
+from .ca.state_updates import (
+    ApplyDelta,
+    ClampOutput,
+    FireRateMask,
+    LivingMask,
+    NoiseInjection,
+    StateUpdatePipeline,
+)
 from nca.core.models.ca.update_models import SimpleMLPUpdate, ResNetUpdate
 from nca.core.models.ca.ca_model import CAModel
 from nca.core.losses.loss_functions import VGGLoss, ReconstructionLoss, L1Loss
@@ -19,50 +27,64 @@ from nca.core.losses.loss_functions import VGGLoss, ReconstructionLoss, L1Loss
 def create_model(config: Config, cond_dim, img_height, img_width):
     device = config.DEVICE
     use_positional_embeddings = config.MODEL.USE_POSITIONAL_EMBEDDINGS
-    noise_injection = config.MODEL.NOISE_INJECTION
-    fire_rate = config.MODEL.FIRE_RATE
 
     def get_img_dims(height, width, compression):
         factor = pow(2, compression)
         return int(height / factor), int(width / factor)
 
     if config.LATENT_TRAINING.ENABLED:
-        channel_n = config.LATENT_TRAINING.LATENT_AE_CHANNEL
         channel_out = config.LATENT_TRAINING.LATENT_AE_CHANNEL
         img_height, img_width = get_img_dims(
             img_height, img_width, config.LATENT_TRAINING.LATENT_AE_COMPRESSION
         )
-        living_mask = False
-        living_mask_index = None
     else:
-        channel_n = config.MODEL.CHANNEL_N
         channel_out = config.MODEL.CHANNEL_OUT
-        living_mask = config.MODEL.LIVING_MASK
-        living_mask_index = config.MODEL.LIVING_MASK_INDEX
-
 
     perception_module = get_perception(config, cond_dim, device)
     update_model = get_update_model(config, perception_module.get_out_channel(), channel_out, device)
+    state_update_pipeline = get_state_update_pipeline(config, device)
 
     ca = CAModel(
-        channel_n=channel_n,
-        channel_out=channel_out,
-        cond_channel_n=cond_dim,
         device=device,
         use_positional_embeddings=use_positional_embeddings,
         img_height=img_height,
         img_width=img_width,
         perception_module=perception_module,
-        living_mask=living_mask,
-        living_mask_indice=living_mask_index,
         update_model_module=update_model,
-        noise_injection=noise_injection,
-        fire_rate=fire_rate,
-        clamp_output=config.MODEL.CLAMP_OUTPUT,
+        state_update_pipeline=state_update_pipeline
     )
     
     # Move to device once after full construction
     return ca.to(device)
+
+
+
+def get_state_update_pipeline(config: Config, device) -> StateUpdatePipeline:
+    state_update_pipeline = []
+    noise_injection = config.MODEL.NOISE_INJECTION
+    fire_rate = config.MODEL.FIRE_RATE
+    clamp_output = config.MODEL.CLAMP_OUTPUT
+
+    if config.LATENT_TRAINING.ENABLED:
+        living_mask = False
+        living_mask_index = None
+    else:
+        living_mask = config.MODEL.LIVING_MASK
+        living_mask_index = config.MODEL.LIVING_MASK_INDEX
+
+    if noise_injection > 0.0:
+        state_update_pipeline.append(NoiseInjection(noise_injection))
+    if fire_rate < 1.0:
+        state_update_pipeline.append(FireRateMask(fire_rate))
+    
+    state_update_pipeline.append(ApplyDelta())
+
+    if living_mask:
+        state_update_pipeline.append(LivingMask(alpha_channel=living_mask_index))
+    if clamp_output:
+        state_update_pipeline.append(ClampOutput())
+
+    return StateUpdatePipeline(state_update_pipeline)
 
 
 def get_update_model(config: Config, in_channel_n, channel_out, device):
@@ -175,7 +197,7 @@ def get_perception(config: Config, cond_dim, device):
     return perception_module
 
 
-def get_latent_encoder(config: Config, device):
+def get_latent_encoder(config: Config, device, inference_only=False):
     # --- Model Initialization ---
     common_args = {
         "in_channels": config.LATENT_TRAINING.LATENT_AE_IN_CHANNEL,
@@ -209,6 +231,9 @@ def get_latent_encoder(config: Config, device):
         )
         model = model.to(device)
 
+        if inference_only:
+            return model, None, None
+
         if config.LATENT_TRAINING.VAE_RECON_LOSS_TYPE == "l1":
             loss_fn = nn.L1Loss(reduction='sum')
         elif config.LATENT_TRAINING.VAE_RECON_LOSS_TYPE == "mse":
@@ -223,8 +248,6 @@ def get_latent_encoder(config: Config, device):
             loss_fn=loss_fn
         )
 
-
-
         vae_kl_beta = config.LATENT_TRAINING.VAE_KL_BETA
         print(f"Using VAE with KL Beta: {vae_kl_beta}")
         return model, reconstruction_criterion, vae_kl_beta
@@ -232,6 +255,8 @@ def get_latent_encoder(config: Config, device):
         print("Initializing AutoEncoder model...")
         model = AutoEncoder(**common_args)
         model = model.to(device)
+        if inference_only:
+            return model, None, None
         # Use standard MSE loss for AE (mean reduction is default)
         ae_criterion = ReconstructionLoss(overflow_loss=config.TRAINING.OVERFLOW_LOSS)
         return model, ae_criterion, None

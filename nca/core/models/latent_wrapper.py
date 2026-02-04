@@ -27,9 +27,9 @@ class LatentWrapper(nn.Module):
             assert os.path.exists(default_ae_path) or (ae_checkpoint is not None), "AutoEncoder weights not found"
 
             if ae_checkpoint is not None:
-                ae.load_state_dict(torch.load(ae_checkpoint, weights_only=True))
+                ae.load_state_dict(torch.load(ae_checkpoint, weights_only=True, map_location=self.device))
             else:
-                ae.load_state_dict(torch.load(default_ae_path, weights_only=True))
+                ae.load_state_dict(torch.load(default_ae_path, weights_only=True, map_location=self.device))
                 print(f"Loaded AutoEncoder weights from {default_ae_path}")
 
         ae.eval()
