@@ -73,7 +73,7 @@ class ClassificationTrainer(BaseTrainer):
         # Return final state (x or z) for pool commit, and prediction image
         return prediction_image.detach(), final_state_for_commit.detach()
 
-    def add_img_logs(self, x0, x, target):
+    def add_img_logs(self, x0, x, target, cond=None):
         if self.config.DATASET.NAME == "mnist":
             # Store for visualization
             self.logger.add_img_logs(

@@ -160,6 +160,14 @@ class BaseTrainer(ABC):
         """Hook for child classes to add extra modules (like AE, Discriminator, etc.)."""
         pass
 
+    def _on_step_end(self, step: int):
+        """Hook called at the end of each training step. Override in subclasses."""
+        pass
+
+    def _on_train_end(self):
+        """Hook called at the end of training. Override in subclasses."""
+        pass
+
     def forward(self, initial_state, cond, target, logging=False, freeze_channels=None):
         # initial_state is either image x or latent z, prepared by train loop
         iter_n = self.get_iter_range()
@@ -241,10 +249,10 @@ class BaseTrainer(ABC):
                 if (i + 1) % self.log_interval == 0:
                     if self.use_latent:
                         self.add_img_logs(
-                            self.latent_wrapper.decode(state0), prediction_image, target
+                            self.latent_wrapper.decode(state0), prediction_image, target, cond
                         )
                     else:
-                        self.add_img_logs(state0, prediction_image, target)
+                        self.add_img_logs(state0, prediction_image, target, cond)
 
                 # Update gradient accumulation counter
                 accumulated_steps += 1
@@ -291,16 +299,24 @@ class BaseTrainer(ABC):
                         final_state, cond, target
                     )  # Use final_state (x or z)
 
+                # Hook for subclass-specific per-step logic
+                self._on_step_end(i)
+
                 # Logging and visualization
-                use_wandb = self.logger.use_wandb
                 if (i + 1) % self.log_interval == 0:
-                    self.commit_logs(i, images=True, silent=use_wandb)
+                    self.commit_logs(i, images=True, silent=self.logger.use_wandb)
                 else:
                     self.commit_logs(i, silent=True)
 
                 # Save model
                 if (i + 1) % self.save_interval == 0:
                     self.save_model(i + 1)
+
+            # Hook for subclass-specific end-of-training logic
+            self._on_train_end()
+
+            # Final logging
+            self.commit_logs(i, silent=True)
 
             # Save final model
             self.save_model("final")
@@ -422,7 +438,7 @@ class BaseTrainer(ABC):
 
         return iter_n
 
-    def add_img_logs(self, x0, x, target):
+    def add_img_logs(self, x0, x, target, cond=None):
         self.logger.add_img_logs(x0, x, target)
 
     def commit_logs(self, step, images=False, silent=False):

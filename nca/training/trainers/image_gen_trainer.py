@@ -11,7 +11,6 @@ class ImageGenTrainer(BaseTrainer):
             self.loss_fn = create_metric("mse")
         assert isinstance(self.loss_fn, torch.nn.Module), "Loss function must be a subclass of torch.nn.Module"
 
-    
     def _run_train_step(self, initial_state, cond, target, logging=False):
         initial_state = initial_state.to(self.device, non_blocking=True)
         if cond is not None:
@@ -25,8 +24,9 @@ class ImageGenTrainer(BaseTrainer):
             if self.config.DATASET.COND_INPAINTING_MASK:
                 prediction_image = prediction_image * cond + (1 - cond) * target
 
-            # Compute loss using the prediction image and target
-            loss_dict = self.loss_fn(prediction_image, target)
+            # Compute loss - slice prediction to match target dims if needed
+            pred_for_loss = prediction_image[:, :target.shape[1]]
+            loss_dict = self.loss_fn(pred_for_loss, target)
             # Scale loss for accumulation
             total_loss = loss_dict["total_loss"] / self.accumulation_steps
 

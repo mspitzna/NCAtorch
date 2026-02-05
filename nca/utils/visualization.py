@@ -16,7 +16,7 @@ def visualize_batch(
     step_i,
     plot=False,
     save_path=".",
-    max_image_dim=2024,
+    max_image_dim=4048,
     pixel_offset=-80,        # negative => left of the axes
     grayscale=False
 ):
@@ -46,7 +46,7 @@ def visualize_batch(
     ######### 2) Make the grid (N rows, each row has batch_size images) #########
     vis = torch.cat(frames, dim=0)  # shape [N * B, C, H, W]
     batch_size = x0.shape[0]
-    grid = vutils.make_grid(vis, nrow=batch_size, padding=2, normalize=False)
+    grid = vutils.make_grid(vis, nrow=batch_size, padding=4, normalize=False, pad_value=1.0)
     grid_np = grid.permute(1, 2, 0).numpy()  # [H, W, C]
     grid_np = np.clip(grid_np, 0, 1)
 
