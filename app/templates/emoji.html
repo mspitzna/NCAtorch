@@ -91,5 +91,15 @@
       }
     });
   });
+
+  // Reset should clear any visual emoji selection
+  const resetButton = document.getElementById("resetButton");
+  if (resetButton) {
+    resetButton.addEventListener("click", () => {
+      document.querySelectorAll(".emote-button").forEach((btn) => {
+        btn.classList.remove("ring-4", "ring-amber-500");
+      });
+    });
+  }
 </script>
 {% endblock %}
