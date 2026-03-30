@@ -24,9 +24,8 @@ class ImageGenTrainer(BaseTrainer):
             if self.config.DATASET.COND_INPAINTING_MASK:
                 prediction_image = prediction_image * cond + (1 - cond) * target
 
-            # Compute loss - slice prediction to match target dims if needed
-            pred_for_loss = prediction_image[:, :target.shape[1]]
-            loss_dict = self.loss_fn(pred_for_loss, target)
+            # Compute loss - pass full prediction so loss fn can penalize hidden channels
+            loss_dict = self.loss_fn(prediction_image, target)
             # Scale loss for accumulation
             total_loss = loss_dict["total_loss"] / self.accumulation_steps
 

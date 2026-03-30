@@ -518,7 +518,11 @@ class VGGStyleOTLoss(Loss):
 
         if self.overflow_loss:
             overflow_loss_img = (imgs[:, :3, :, :] - imgs[:, :3, :, :].clamp(0, 1.0)).abs().mean()
-            overflow_loss_hidden = (imgs[:, 3:, :, :] - imgs[:, 3:, :, :].clamp(-1.0, 1.0)).abs().mean()
+            hidden = imgs[:, 3:, :, :]
+            if hidden.numel() > 0:
+                overflow_loss_hidden = (hidden - hidden.clamp(-1.0, 1.0)).abs().mean()
+            else:
+                overflow_loss_hidden = torch.tensor(0.0, device=imgs.device)
             overflow_loss = overflow_loss_img + overflow_loss_hidden
             total_loss = total_loss + overflow_loss
             return {"total_loss": total_loss, "overflow_loss": overflow_loss, "ot_loss": total_loss}
