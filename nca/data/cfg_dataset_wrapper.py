@@ -1,8 +1,9 @@
 import torch
 from torch.utils.data import Dataset
+from nca.data.datasets.base_dataset import NCADataset
 
 
-class CFGDatasetWrapper(Dataset):
+class CFGDatasetWrapper(NCADataset):
     """
     Wrapper for conditional datasets to enable Classifier-Free Guidance (CFG) training.
     
@@ -65,19 +66,7 @@ class CFGDatasetWrapper(Dataset):
                         
         return null_condition
     
-    def get_sample_for_digit(self, digit):
-        """
-        Forward method calls to base dataset if they exist.
-        Useful for datasets like GrowingMNISTDataset that have special methods.
-        """
-        if hasattr(self.base_dataset, 'get_sample_for_digit'):
-            return self.base_dataset.get_sample_for_digit(digit)
-        else:
-            raise AttributeError(f"Base dataset {type(self.base_dataset)} doesn't have get_sample_for_digit method")
-    
-    def get_condition_tensor(self, idx):
-        """Forward method calls to base dataset if they exist."""
-        if hasattr(self.base_dataset, 'get_condition_tensor'):
-            return self.base_dataset.get_condition_tensor(idx)
-        else:
-            raise AttributeError(f"Base dataset {type(self.base_dataset)} doesn't have get_condition_tensor method")
+    def __getattr__(self, name):
+        if name == 'base_dataset':
+            raise AttributeError(name)
+        return getattr(self.base_dataset, name)

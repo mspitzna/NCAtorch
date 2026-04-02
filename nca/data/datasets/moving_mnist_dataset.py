@@ -1,10 +1,10 @@
 import torch
 from torchvision import transforms
 from torchvision.datasets import MovingMNIST
-from torch.utils.data import Dataset
+from nca.data.datasets.base_dataset import NCADataset
 
 
-class MovingMNISTDataset(Dataset):
+class MovingMNISTDataset(NCADataset):
     """
     Wraps torchvision's MovingMNIST dataset so that each index returns a
     sub-sequence of length `history_n` (possibly reversed),

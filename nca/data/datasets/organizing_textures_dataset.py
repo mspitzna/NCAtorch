@@ -1,10 +1,10 @@
 from PIL import Image
 import torch
 from torchvision import transforms
-from torch.utils.data import Dataset
+from nca.data.datasets.base_dataset import NCADataset
 
 
-class OrganizingTexturesDataset(Dataset):
+class OrganizingTexturesDataset(NCADataset):
     def __init__(
         self,
         sample_path,

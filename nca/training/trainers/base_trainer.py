@@ -439,7 +439,16 @@ class BaseTrainer(ABC):
         return iter_n
 
     def add_img_logs(self, x0, x, target, cond=None):
-        self.logger.add_img_logs(x0, x, target)
+        dataset = self.dataloader.get_dataset()
+        if hasattr(dataset, 'batch_to_rgb'):
+            if not self.use_latent:
+                for key, val in self.logger.get_state_logs().items():
+                    _, val_vis, _ = dataset.batch_to_rgb(val, val, target, cond)
+                    self.logger.add_state_log(key, val_vis)
+            x0_vis, x_vis, target_vis = dataset.batch_to_rgb(x0, x, target, cond)
+        else:
+            x0_vis, x_vis, target_vis = x0, x, target
+        self.logger.add_img_logs(x0_vis, x_vis, target_vis)
 
     def commit_logs(self, step, images=False, silent=False):
         metrics_snapshot = self.logger.peek_metrics()

@@ -1,6 +1,6 @@
 import torch
 from torchvision import transforms, datasets
-from torch.utils.data import Dataset
+from nca.data.datasets.base_dataset import NCADataset
 
 
 def compute_saliency(image_tensor):
@@ -11,7 +11,7 @@ def compute_saliency(image_tensor):
     return mask
 
 
-class CIFAR10Dataset(Dataset):
+class CIFAR10Dataset(NCADataset):
     def __init__(self, root, channel_n, target_size, train=True, device="cpu"):
         self.cifar10_data = datasets.CIFAR10(root=root, train=train, download=True)
         self.channel_n = channel_n

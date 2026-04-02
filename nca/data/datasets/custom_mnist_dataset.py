@@ -1,9 +1,9 @@
 import torch
 from torchvision import transforms, datasets
-from torch.utils.data import Dataset
+from nca.data.datasets.base_dataset import NCADataset
 
 
-class CustomMNISTDataset(Dataset):
+class CustomMNISTDataset(NCADataset):
     def __init__(self, root, channel_n, train=True, target_padding=0, device="cpu"):
         # Load MNIST data
         self.mnist_data = datasets.MNIST(

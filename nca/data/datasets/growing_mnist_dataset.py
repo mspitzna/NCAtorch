@@ -1,10 +1,10 @@
 import torch
 import random
 from torchvision import transforms, datasets
-from torch.utils.data import Dataset
+from nca.data.datasets.base_dataset import NCADataset
 import torch.nn.functional as F
 
-class GrowingMNISTDataset(Dataset):
+class GrowingMNISTDataset(NCADataset):
     """
     Creates a dataset for training an NCA to grow MNIST digits.
     Each sample provides a starting seed, a condition vector, and the target image.

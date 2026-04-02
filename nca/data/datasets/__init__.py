@@ -1,5 +1,6 @@
 """Dataset implementations for NCA-Torch"""
 
+from nca.data.datasets.base_dataset import NCADataset
 from nca.data.datasets.icon_dataset import IconDataset
 from nca.data.datasets.edges_dataset import EdgesDataset
 from nca.data.datasets.custom_mnist_dataset import CustomMNISTDataset
@@ -11,6 +12,7 @@ from nca.data.datasets.growing_mnist_dataset import GrowingMNISTDataset
 from nca.data.datasets.walking_dataset import WalkingDataset
 
 __all__ = [
+    "NCADataset",
     "IconDataset",
     "EdgesDataset",
     "CustomMNISTDataset",

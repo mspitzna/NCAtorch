@@ -2,11 +2,11 @@ import os
 import random
 from PIL import Image
 from torchvision import transforms
-from torch.utils.data import Dataset
+from nca.data.datasets.base_dataset import NCADataset
 from nca.utils.image_utils import make_circle_damage_mask
 
 
-class CelebADataset(Dataset):
+class CelebADataset(NCADataset):
     """
     A wrapper for the official torchvision CelebA dataset that provides a clean
     interface and handles automatic downloads.

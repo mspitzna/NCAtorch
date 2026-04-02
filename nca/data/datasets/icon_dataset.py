@@ -5,10 +5,10 @@ import PIL.Image
 import requests
 import torch
 import torch.nn.functional as F
-from torch.utils.data import Dataset
+from nca.data.datasets.base_dataset import NCADataset
 
 
-class IconDataset(Dataset):
+class IconDataset(NCADataset):
     def __init__(self, emojis, target_size, target_padding, channel_n, condition_size=None, total_samples=None, device="cpu", rectangle=False):
         """
         Args:

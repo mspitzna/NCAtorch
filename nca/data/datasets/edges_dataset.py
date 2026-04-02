@@ -4,7 +4,7 @@ import random
 import numpy as np
 import torch
 from torchvision import transforms
-from torch.utils.data import Dataset
+from nca.data.datasets.base_dataset import NCADataset
 
 
 def get_params(size, resize_size, crop_size):
@@ -101,7 +101,7 @@ def __flip(img, flip):
     return img
 
 
-class EdgesDataset(Dataset):
+class EdgesDataset(NCADataset):
     """A dataset class for paired image dataset.
     It assumes that the directory '/path/to/data/train' contains image pairs in the form of {A,B}.
     During test time, you need to prepare a directory '/path/to/data/test'.
