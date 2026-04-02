@@ -443,7 +443,7 @@ class BaseTrainer(ABC):
         if hasattr(dataset, 'batch_to_rgb'):
             if not self.use_latent:
                 for key, val in self.logger.get_state_logs().items():
-                    _, val_vis, _ = dataset.batch_to_rgb(val, val, target, cond)
+                    _, val_vis, _ = dataset.batch_to_rgb(x0, val, target, cond)
                     self.logger.add_state_log(key, val_vis)
             x0_vis, x_vis, target_vis = dataset.batch_to_rgb(x0, x, target, cond)
         else:
