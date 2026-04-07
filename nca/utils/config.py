@@ -99,6 +99,9 @@ class TrainingConfig(BaseModel):
     GRADIENT_CHECKPOINT_SEGMENTS: int = 16
     GRADIENT_ACCUMULATION_STEPS: int = 1
     MIXED_PRECISION: bool = False
+    OVERFLOW_WEIGHT: float = 1.0
+    LPIPS_NET: str = "alex"
+    VGG_PROJ_N: int = 32
 
     @field_validator("LOSS_FN")
     @classmethod
@@ -243,8 +246,9 @@ class LatentConfig(BaseModel):
     @field_validator("ENCODER_TYPE")
     @classmethod
     def check_encoder_type(cls, value):
-        if value not in ["AE", "VAE"]:
-            raise ValueError("ENCODER_TYPE must be one of ['AE', 'VAE'].")
+        from nca.core.models.latent_encoder_factory import LATENT_ENCODER_REGISTRY
+        if value not in LATENT_ENCODER_REGISTRY:
+            raise ValueError(f"ENCODER_TYPE must be one of {sorted(LATENT_ENCODER_REGISTRY)}.")
         return value
 
 

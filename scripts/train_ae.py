@@ -17,7 +17,7 @@ from nca.utils.config import load_config
 from nca.training.training_utils import create_warmup_cosine_scheduler, export_model
 from nca.utils.visualization import visualize_batch
 from nca.utils.image_utils import make_circle_damage_mask
-from nca.core.models.model_factory import get_latent_encoder
+from nca.core.models.latent_encoder_factory import create_latent_encoder
 
 
 def parse_args():
@@ -123,7 +123,7 @@ def main():
     dataloader, _, h, w = create_dataset(config)
     print(f"Input H: {h}, W: {w}")
 
-    model, reconstruction_criterion, vae_kl_beta = get_latent_encoder(config, device)
+    model, reconstruction_criterion, vae_kl_beta = create_latent_encoder(config, device)
 
 
     optimizer = optim.AdamW(model.parameters(), lr=config.LATENT_TRAINING.LATENT_AE_LR, weight_decay=1e-5)

@@ -407,58 +407,6 @@ class AdversarialLoss(Loss):
         loss_value = self.adv_loss_fn(d_output, target_tensor)
         return {"total_loss": loss_value}
 
-
-class AdversarialReconstructionLoss(Loss):
-    def __init__(
-        self,
-        discriminator,
-        recon_loss_fn=None,
-        recon_loss_type="mse",
-        adv_weight=1.0,
-        recon_weight=1.0,
-        noise_value=0.1,
-        noise_ratio=0.5,
-        device="cuda"
-    ):
-        super().__init__()
-        
-        # Initialize reconstruction loss based on type
-        if recon_loss_fn is not None:
-            self.recon_loss_fn = recon_loss_fn
-        elif recon_loss_type.lower() == "lpips":
-            self.recon_loss_fn = LPIPSLoss(device=device)
-        elif recon_loss_type.lower() == "mse":
-            self.recon_loss_fn = ReconstructionLoss()
-        else:
-            raise ValueError(f"Unknown recon_loss_type: {recon_loss_type}")
-            
-        self.adv_loss_fn = AdversarialLoss(
-            discriminator,
-            adv_loss_fn=torch.nn.BCEWithLogitsLoss(),
-            noise_value=noise_value,
-            noise_ratio=noise_ratio,
-        )
-        self.discriminator = discriminator
-        self.adv_weight = adv_weight
-        self.recon_weight = recon_weight
-
-    def forward(self, predictions, targets, **kwargs):
-        if self.recon_weight > 0:
-            recon_loss = self.recon_loss_fn(predictions, targets)["total_loss"]
-            adv_loss = self.adv_loss_fn(predictions, "real")["total_loss"]
-            total_loss = self.recon_weight * recon_loss + self.adv_weight * adv_loss
-            return {
-                "total_loss": total_loss,
-                "reconstruction_loss": recon_loss,
-                "adversarial_loss": adv_loss,
-            }
-        else:
-            adv_loss = self.adv_loss_fn(predictions, "real")["total_loss"]
-            return {
-                "total_loss": adv_loss,
-                "adversarial_loss": adv_loss,
-            }
-
 class VGGStyleOTLoss(Loss):
     def __init__(self, proj_n=32, device=None, overflow_loss=False,):
         super(VGGStyleOTLoss, self).__init__()

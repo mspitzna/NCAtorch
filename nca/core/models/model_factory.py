@@ -1,7 +1,4 @@
-import torch.nn as nn
 from nca.utils.config import Config
-from nca.core.models.auto_encoder.ae import AutoEncoder
-from nca.core.models.auto_encoder.vae import VAE
 from .ca.state_updates import (
     ApplyDelta,
     ClampOutput,
@@ -13,7 +10,6 @@ from .ca.state_updates import (
 from nca.core.models.perception_factory import create_perception_module
 from nca.core.models.update_model_factory import create_update_model
 from nca.core.models.ca.ca_model import CAModel
-from nca.core.losses.loss_functions import VGGLoss, ReconstructionLoss
 
 
 def create_model(config: Config, cond_dim, img_height, img_width):
@@ -65,68 +61,3 @@ def get_state_update_pipeline(config: Config, device) -> StateUpdatePipeline:
     return StateUpdatePipeline(pipeline)
 
 
-def get_latent_encoder(config: Config, device, inference_only=False):
-    # --- Model Initialization ---
-    common_args = {
-        "in_channels": config.LATENT_TRAINING.LATENT_AE_IN_CHANNEL,
-        "out_channels": config.LATENT_TRAINING.LATENT_AE_OUT_CHANNEL,
-        "latent_channels": config.LATENT_TRAINING.LATENT_AE_CHANNEL,
-        "compression_level": config.LATENT_TRAINING.LATENT_AE_COMPRESSION,
-    }
-
-    model_type = config.LATENT_TRAINING.ENCODER_TYPE
-
-    if model_type == "VAE":
-        print("Initializing VAE_ResNet model...")
-        # --- Get VAE specific args from config ---
-        base_channels = config.LATENT_TRAINING.VAE_BASE_CHANNELS
-        num_downsamples = config.LATENT_TRAINING.VAE_NUM_DOWNSAMPLES
-        norm_groups = config.LATENT_TRAINING.VAE_NORM_GROUPS
-        activation_fn = nn.LeakyReLU(0.2, inplace=True)  # Default or configure
-        # Use Tanh which doesn't saturate as hard as Sigmoid
-        # Tanh outputs [-1, 1], better gradient flow than Sigmoid [0, 1]
-        final_activation = nn.Tanh()
-
-        model = VAE(
-            in_channels=config.LATENT_TRAINING.LATENT_AE_IN_CHANNEL,
-            out_channels=config.LATENT_TRAINING.LATENT_AE_OUT_CHANNEL,
-            latent_channels=config.LATENT_TRAINING.LATENT_AE_CHANNEL,
-            base_channels=base_channels,
-            num_downsamples=num_downsamples,
-            norm_groups=norm_groups,
-            activation_fn=activation_fn,
-            final_activation=final_activation,
-        )
-        model = model.to(device)
-
-        if inference_only:
-            return model, None, None
-
-        if config.LATENT_TRAINING.VAE_RECON_LOSS_TYPE == "l1":
-            loss_fn = nn.L1Loss(reduction='sum')
-        elif config.LATENT_TRAINING.VAE_RECON_LOSS_TYPE == "mse":
-            loss_fn = nn.MSELoss(reduction='sum')
-        else:
-            raise ValueError(f"Unknown VAE_RECON_LOSS_TYPE: {config.LATENT_TRAINING.VAE_RECON_LOSS_TYPE}")
-
-        reconstruction_criterion = VGGLoss(
-            device=device,
-            vgg_loss_weight=config.LATENT_TRAINING.VAE_VGG_LOSS_WEIGHT,
-            l1_loss_weight=config.LATENT_TRAINING.VAE_RECON_LOSS_WEIGHT,
-            loss_fn=loss_fn
-        )
-
-        vae_kl_beta = config.LATENT_TRAINING.VAE_KL_BETA
-        print(f"Using VAE with KL Beta: {vae_kl_beta}")
-        return model, reconstruction_criterion, vae_kl_beta
-    elif model_type == "AE":
-        print("Initializing AutoEncoder model...")
-        model = AutoEncoder(**common_args)
-        model = model.to(device)
-        if inference_only:
-            return model, None, None
-        # Use standard MSE loss for AE (mean reduction is default)
-        ae_criterion = ReconstructionLoss(overflow_loss=config.TRAINING.OVERFLOW_LOSS)
-        return model, ae_criterion, None
-    else:
-        raise ValueError(f"Unknown LATENT_TRAINING.MODEL_TYPE: {model_type}")

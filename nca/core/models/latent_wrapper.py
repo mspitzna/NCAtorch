@@ -1,7 +1,7 @@
 import os
 import torch
 import torch.nn as nn
-from nca.core.models.model_factory import get_latent_encoder
+from nca.core.models.latent_encoder_factory import create_latent_encoder
 from nca.utils.config import Config
 
 
@@ -17,7 +17,7 @@ class LatentWrapper(nn.Module):
     def _load_encoder_decoder(self):
         """Load encoder/decoder from checkpoint"""
         
-        ae, reconstruction_criterion, vae_kl_beta = get_latent_encoder(self.config, self.device)
+        ae, reconstruction_criterion, vae_kl_beta = create_latent_encoder(self.config, self.device)
 
         # Load AE weights
         folder_name = self.config.FOLDER_NAME

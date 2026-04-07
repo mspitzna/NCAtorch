@@ -5,7 +5,7 @@ import os
 from nca.core.models.model_factory import create_model
 from nca.data.dataset_factory import create_dataset
 from nca.utils.config import load_config, Config
-from nca.core.models.model_factory import get_latent_encoder
+from nca.core.models.latent_encoder_factory import create_latent_encoder
 
 
 class CaHandler:
@@ -45,7 +45,7 @@ class CaHandler:
         self.ca_model.eval()
 
         if self.config.LATENT_TRAINING.ENABLED:
-            self.ae, _, _ = get_latent_encoder(self.config, "cpu", inference_only=True)
+            self.ae, _, _ = create_latent_encoder(self.config, "cpu", inference_only=True)
 
             default_ae_path = os.path.join(log_path, "ae_checkpoints", "ae.pt" if self.config.LATENT_TRAINING.ENCODER_TYPE == "AE" else "vae.pt")
             self.ae.load_state_dict(torch.load(default_ae_path, weights_only=True, map_location=device))

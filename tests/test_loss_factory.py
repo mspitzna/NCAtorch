@@ -67,6 +67,9 @@ def _make_config(loss_fn_key, overflow=False):
     cfg = MagicMock()
     cfg.TRAINING.LOSS_FN = loss_fn_key
     cfg.TRAINING.OVERFLOW_LOSS = overflow
+    cfg.TRAINING.OVERFLOW_WEIGHT = 1.0
+    cfg.TRAINING.LPIPS_NET = "alex"
+    cfg.TRAINING.VGG_PROJ_N = 32
     cfg.DEVICE = "cpu"
     return cfg
 
