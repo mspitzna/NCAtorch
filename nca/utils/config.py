@@ -134,6 +134,7 @@ class TrainingConfig(BaseModel):
         MIXED_PRECISION: Enable automatic mixed precision (AMP).
         LPIPS_NET: Backbone for LPIPS loss — ``alex``, ``vgg``, or ``squeeze``.
         VGG_PROJ_N: Number of random projections in the VGG style loss.
+        TRAINER_TYPE: Trainer to use.
     """
     BATCH_SIZE: int = 12
     STEPS: int = 10000
@@ -158,6 +159,19 @@ class TrainingConfig(BaseModel):
     OVERFLOW_WEIGHT: float = 1.0
     LPIPS_NET: str = "alex"
     VGG_PROJ_N: int = 32
+    TRAINER_TYPE: Optional[str] = None
+
+    @field_validator("TRAINER_TYPE")
+    @classmethod
+    def check_trainer_type(cls, value):
+        if value is None:
+            return value
+        from nca.training.trainer_factory import TRAINER_REGISTRY
+        if value not in TRAINER_REGISTRY:
+            raise ValueError(
+                f"TRAINER_TYPE must be one of {sorted(TRAINER_REGISTRY)} or null for auto-selection."
+            )
+        return value
 
     @field_validator("LOSS_FN")
     @classmethod
@@ -220,7 +234,6 @@ class DatasetConfig(BaseModel):
     HISTORY_N: int = 1
     REVERSE_HISTORY_SEED: bool = False
     NUM_WORKERS: int = 0
-    COND_INPAINTING_MASK: bool = False
     INVERTIBLE: bool = False
     SEED_SIZE: int = 1  # Size of the cross pattern for GrowingMNISTDataset
     ENABLE_ROTATION: bool = False  # Enable rotation transformations in GrowingMNISTDataset

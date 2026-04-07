@@ -20,6 +20,37 @@ from nca.core.models.latent_wrapper import LatentWrapper
 
 
 class BaseTrainer(ABC):
+    """Abstract base class for all NCA trainers.
+
+    Handles the shared training infrastructure so subclasses only need to
+    implement two methods:
+
+    - ``_initialize_additional_components()`` — set up extra modules, loss
+      functions, or optimizers that are specific to the trainer.
+    - ``_compute_losses(initial_state, cond, target, logging)`` — run the
+      forward pass and return ``(prediction_image, final_state, loss_dict)``.
+      ``BaseTrainer`` wraps this call in AMP autocast and takes care of
+      accumulation scaling, NaN detection, backward, and metric logging.
+
+    For trainers that require multiple optimizers (e.g. GANs), override
+    ``_run_train_step`` directly instead of ``_compute_losses``.
+
+    Optional hooks: ``_on_step_end(step)`` and ``_on_train_end()``.
+
+    Attributes:
+        ca_model: The cellular automaton model being trained.
+        config (Config): Full experiment configuration.
+        device (str): Target compute device (e.g. ``"cuda"``).
+        loss_fn: Primary loss module; may be ``None`` until
+            ``_initialize_additional_components`` sets it.
+        use_latent (bool): Whether training runs in latent space via
+            ``self.latent_wrapper``.
+        scaler: AMP ``GradScaler`` or ``None`` when mixed precision is off.
+        pool: Sample pool for persistent-state training, or ``None``.
+        logger (Logger): Handles metric and image logging to disk / W&B.
+        accumulation_steps (int): Gradient accumulation window.
+    """
+
     def __init__(
         self,
         ca_model,
@@ -78,6 +109,79 @@ class BaseTrainer(ABC):
         self.pool = self._initialize_sample_pool(config, self.device)
 
         self._initialize_additional_components()  # Hook for children
+
+    @abstractmethod
+    def _initialize_additional_components(self):
+        """Hook for child classes to add extra modules (like AE, Discriminator, etc.)."""
+        pass
+
+    def _on_step_end(self, step: int):
+        """Hook called at the end of each training step. Override in subclasses."""
+        pass
+
+    def _on_train_end(self):
+        """Hook called at the end of training. Override in subclasses."""
+        pass
+
+    def _to_device(self, *tensors):
+        """Move tensors to the training device, passing None through unchanged."""
+        return [t.to(self.device, non_blocking=True) if t is not None else None for t in tensors]
+
+    def _compute_losses(self, initial_state, cond, target, logging=False):
+        """Forward pass and loss computation.
+
+        Override this method to define your training logic. ``BaseTrainer``
+        calls it from ``_run_train_step`` inside an ``autocast`` context and
+        handles accumulation scaling, AMP, NaN checking, and the backward pass
+        automatically.
+
+        Use ``self._to_device()`` to move tensors and ``self.forward()`` to
+        run the CA. Return a ``loss_dict`` with at least a ``"total_loss"`` key.
+
+        Args:
+            initial_state: Seed state tensor (pixel or latent space).
+            cond: Condition tensor or ``None``.
+            target: Target image tensor.
+            logging: Whether this step should log intermediate states.
+
+        Returns:
+            Tuple ``(prediction_image, final_state, loss_dict)``.
+
+        Raises:
+            NotImplementedError: If neither this method nor ``_run_train_step``
+                is overridden by the subclass.
+        """
+        raise NotImplementedError(
+            "Implement _compute_losses(initial_state, cond, target, logging) "
+            "or override _run_train_step() for custom multi-loss setups (e.g. GAN)."
+        )
+
+    def _run_train_step(self, initial_state, cond, target, logging=False):
+        """Default training step.
+
+        Calls ``_compute_losses``, then handles accumulation scaling, AMP,
+        NaN checking, backward, and metric logging. Override this method
+        directly only when you need full control (e.g. multi-optimizer GAN
+        training with separate scalers).
+        """
+        with torch.amp.autocast(device_type=self.device, enabled=self.config.TRAINING.MIXED_PRECISION):
+            prediction_image, final_state, loss_dict = self._compute_losses(
+                initial_state, cond, target, logging=logging
+            )
+        total_loss = loss_dict["total_loss"] / self.accumulation_steps
+
+        if torch.isnan(total_loss):
+            raise ValueError("Loss is NaN. Halting training.")
+
+        if self.config.TRAINING.MIXED_PRECISION:
+            self.scaler.scale(total_loss).backward()
+        else:
+            total_loss.backward()
+
+        with torch.no_grad():
+            self.logger.add_metrics(loss_dict)
+        return prediction_image.detach(), final_state.detach()
+
 
     def _initialize_base_optimizers(self):
         """Initialize models, optimizers, and schedulers."""
@@ -155,19 +259,6 @@ class BaseTrainer(ABC):
 
         return state  # Returns final state (x or z)
 
-    @abstractmethod
-    def _initialize_additional_components(self):
-        """Hook for child classes to add extra modules (like AE, Discriminator, etc.)."""
-        pass
-
-    def _on_step_end(self, step: int):
-        """Hook called at the end of each training step. Override in subclasses."""
-        pass
-
-    def _on_train_end(self):
-        """Hook called at the end of training. Override in subclasses."""
-        pass
-
     def forward(self, initial_state, cond, target, logging=False, freeze_channels=None):
         # initial_state is either image x or latent z, prepared by train loop
         iter_n = self.get_iter_range()
@@ -194,14 +285,6 @@ class BaseTrainer(ABC):
             final_state_for_commit = x_final  # Commit image state
 
         return prediction_image, final_state_for_commit
-
-    @abstractmethod
-    def _run_train_step(self, initial_state, cond, target, logging=False):
-        """
-        This method should be implemented by child classes to define the training step logic.
-        It should handle the forward pass, loss computation, and backward pass.
-        """
-        pass
 
     def train(self):
         try:
@@ -478,6 +561,3 @@ class BaseTrainer(ABC):
             self._interval_metric_buffer.clear()
 
         self.logger.reset_metrics()
-
-    def save_to_image(self, x, path):
-        save_image(x, path)

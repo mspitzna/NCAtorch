@@ -199,9 +199,10 @@ nca-torch/
 
 | Guide | Description |
 |-------|-------------|
-| [Custom Perception](docs/custom_perception_guide.md) | Add a new neighborhood operator — register one lambda, done |
-| [Custom Update Module](docs/custom_update_module_guide.md) | Add a new update architecture — register one lambda, done |
+| [Custom Perception](docs/custom_perception_guide.md) | Add a new neighborhood operator |
+| [Custom Update Module](docs/custom_update_module_guide.md) | Add a new update architecture |
 | [Custom Dataset](docs/custom_dataset_guide.md) | Add a new dataset and wire it into the training pipeline |
+| [Custom Trainer](docs/custom_trainer_guide.md) | Add a new training loop by implementing two methods and registering one entry |
 
 ## 📝 Citation
 

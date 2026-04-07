@@ -7,10 +7,25 @@ from nca.training.training_utils import create_warmup_cosine_scheduler
 from nca.core.losses.loss_functions import LPIPSLoss, ReconstructionLoss, L1Loss
 
 class AdversarialTrainer(BaseTrainer):
-    """
-    Implements a stable and conventional adversarial training logic (WGAN-GP).
-    This trainer updates the critic on each step and the generator every 'n_critic' steps
-    to ensure the critic is robust before the generator is updated.
+    """Adversarial trainer implementing WGAN-GP for high-quality image generation.
+
+    Maintains a separate ``Critic`` network alongside the CA generator and
+    alternates their updates according to the ``D_N_CRITIC`` schedule.  The
+    total generator loss is a weighted sum of a reconstruction term
+    (MSE / L1 / LPIPS, set via ``TRAINING.LOSS_FN``) and the adversarial term.
+
+    Because two optimizers and two scalers are involved, this trainer overrides
+    ``_run_train_step`` directly rather than implementing ``_compute_losses``.
+
+    Selected automatically when ``ADVERSARIAL.ENABLED`` is ``true``.
+    Configure via ``TRAINING.TRAINER_TYPE: "adversarial"`` to force it.
+
+    Key config fields:
+        ``ADVERSARIAL.ADV_WEIGHT`` — weight of the adversarial loss term.
+        ``ADVERSARIAL.RECON_WEIGHT`` — weight of the reconstruction loss term.
+        ``ADVERSARIAL.D_N_CRITIC`` — critic updates per generator update.
+        ``ADVERSARIAL.D_START_TRAINING`` — step at which adversarial training begins.
+        ``ADVERSARIAL.D_GP_WEIGHT`` — gradient-penalty coefficient.
     """
     
     def __init__(self, *args, **kwargs):
@@ -100,10 +115,6 @@ class AdversarialTrainer(BaseTrainer):
                     prediction_image, _ = self.forward(initial_state, condition, target_img)
                 
                 fake_images = prediction_image.detach()
-
-                # Handle inpainting masks if necessary
-                if self.config.DATASET.COND_INPAINTING_MASK:
-                    fake_images = fake_images * condition + (1 - condition) * target_img
 
                 # Construct critic inputs based on flags
                 real_parts = [target_img[:, :self.config.ADVERSARIAL.D_IN_CHANNELS]]

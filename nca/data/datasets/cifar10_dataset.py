@@ -1,7 +1,7 @@
 import torch
 from torchvision import transforms, datasets
 from nca.data.datasets.base_dataset import NCADataset
-
+from nca.utils.image_utils import to_rgba, to_rgb
 
 def compute_saliency(image_tensor):
     # Placeholder: convert to grayscale and threshold as a simple saliency approximation.
@@ -57,6 +57,16 @@ class CIFAR10Dataset(NCADataset):
     
         # Return input, dummy condition, and target mask.
         return seed_tensor, torch.tensor(0), target_mask
+    
+    def batch_to_rgb(self, x0, x, target, cond=None):
+        """
+        Convert a batch of raw NCA tensors to RGB for logging.
+        Returns (x0_rgb, x_rgb, target_rgb) — each (B, 3, H, W).
+        """
+        x0_rgb = self.apply_per_pixel_coloring(to_rgba(x0), target)
+        x_rgb = self.apply_per_pixel_coloring(to_rgba(x), x[:, -10:])
+        target_rgb = to_rgb(x0[:, :3])  # Just show the original image for the target, without coloring
+        return x0_rgb, x_rgb, target_rgb
 
     def apply_per_pixel_coloring(self, image_tensor, prediction_tensor):
         """

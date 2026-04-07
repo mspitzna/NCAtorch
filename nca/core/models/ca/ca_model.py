@@ -158,8 +158,9 @@ class CAModel(nn.Module, ABC):
         """
         original_state_full = x
         frozen_layers = None
-        if freeze_channels is not None:
-            frozen_layers, state = x[:, :freeze_channels + 1].clone(), x[:, freeze_channels + 1:].clone()
+        if freeze_channels is not None and freeze_channels > 0:
+            frozen_layers = x[:, :freeze_channels].clone()
+            state = x[:, freeze_channels:].clone()
         else:
             state = x.clone()  # No channels are frozen
 
@@ -177,8 +178,8 @@ class CAModel(nn.Module, ABC):
 
         # When some channels are frozen the state only contains the unfrozen portion,
         # so dx must be sliced to match before entering the update pipeline.
-        if freeze_channels is not None:
-            dx = dx[:, freeze_channels + 1:]
+        if freeze_channels is not None and freeze_channels > 0:
+            dx = dx[:, freeze_channels:]
 
         # 4) Apply update pipeline (noise, fire-rate, add, living mask, clamp, etc.)
         state, dx = self.state_updater(
@@ -188,7 +189,7 @@ class CAModel(nn.Module, ABC):
             frozen_layers=frozen_layers,
         )
 
-        if freeze_channels is not None:
+        if freeze_channels is not None and freeze_channels > 0:
             state = torch.cat([frozen_layers, state], dim=1)
         if return_residuals:
             return state, dx

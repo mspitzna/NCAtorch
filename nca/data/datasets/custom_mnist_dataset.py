@@ -1,6 +1,7 @@
 import torch
 from torchvision import transforms, datasets
 from nca.data.datasets.base_dataset import NCADataset
+from nca.utils.image_utils import to_grayscale
 
 
 class CustomMNISTDataset(NCADataset):
@@ -55,6 +56,16 @@ class CustomMNISTDataset(NCADataset):
         digit_mask = image_tensor[0] >= 0.1
         per_pixel_label[digit_label, digit_mask] = 1.0
         return per_pixel_label
+    
+    def batch_to_rgb(self, x0, x, target, cond=None):
+        """
+        Convert a batch of raw NCA tensors to RGB for logging.
+        Returns (x0_rgb, x_rgb, target_rgb) — each (B, 3, H, W).
+        """
+        x0_rgb = self.generate_colored_image(to_grayscale(x0), x0[:, -10:])
+        x_rgb = self.generate_colored_image(to_grayscale(x), x[:, -10:])
+        target_rgb = self.generate_colored_image(to_grayscale(x0), target[:, -10:])
+        return x0_rgb, x_rgb, target_rgb
 
     def generate_colored_image(self, image_tensor, per_pixel_label):
         """
