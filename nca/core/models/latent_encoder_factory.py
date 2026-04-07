@@ -79,3 +79,16 @@ def create_latent_encoder(config: Config, device: str, inference_only: bool = Fa
             f"Invalid ENCODER_TYPE: '{key}'. Valid options: {sorted(LATENT_ENCODER_REGISTRY)}"
         )
     return LATENT_ENCODER_REGISTRY[key](config, device, inference_only)
+
+
+def get_checkpoint_filename(encoder_type: str) -> str:
+    """Returns the default checkpoint filename for a given encoder type.
+
+    Derived from the registry key so any new entry is handled automatically.
+    Matches the save convention in train_ae.py: f"{model_type.lower()}.pt".
+    """
+    if encoder_type not in LATENT_ENCODER_REGISTRY:
+        raise ValueError(
+            f"Unknown ENCODER_TYPE: '{encoder_type}'. Valid options: {sorted(LATENT_ENCODER_REGISTRY)}"
+        )
+    return f"{encoder_type.lower()}.pt"

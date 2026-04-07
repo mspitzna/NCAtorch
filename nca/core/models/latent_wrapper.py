@@ -1,7 +1,7 @@
 import os
 import torch
 import torch.nn as nn
-from nca.core.models.latent_encoder_factory import create_latent_encoder
+from nca.core.models.latent_encoder_factory import create_latent_encoder, get_checkpoint_filename
 from nca.utils.config import Config
 
 
@@ -23,7 +23,8 @@ class LatentWrapper(nn.Module):
         folder_name = self.config.FOLDER_NAME
         if folder_name != "??testing":
             ae_checkpoint = self.config.LATENT_TRAINING.AE_CHECKPOINT
-            default_ae_path = os.path.join(folder_name, "ae_checkpoints", "ae.pt" if self.config.LATENT_TRAINING.ENCODER_TYPE == "AE" else "vae.pt")
+            checkpoint_file = get_checkpoint_filename(self.config.LATENT_TRAINING.ENCODER_TYPE)
+            default_ae_path = os.path.join(folder_name, "ae_checkpoints", checkpoint_file)
             assert os.path.exists(default_ae_path) or (ae_checkpoint is not None), "AutoEncoder weights not found"
 
             if ae_checkpoint is not None:
