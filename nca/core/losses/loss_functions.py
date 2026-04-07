@@ -291,11 +291,11 @@ class PixelAccuracyLoss(Loss):
         super().__init__()
 
     def forward(self, predictions, targets):
-        mask = (targets != 0)  # Ignore background class.
-        # If one-hot, convert to integer class indices.
+        # If one-hot, convert to integer class indices first.
         if targets.dim() == 4 and targets.shape[1] > 1:
             targets = targets.argmax(dim=1)  # -> [B, H, W]
-            
+
+        mask = (targets != 0)  # Ignore background class.
         correct_pixels = (predictions.argmax(dim=1) == targets).float() * mask.float()
         total_pixels = mask.sum().float()
         pixel_accuracy = correct_pixels.sum() / total_pixels
@@ -529,96 +529,6 @@ class VGGStyleOTLoss(Loss):
         
 
         return {"total_loss": total_loss, "ot_loss": total_loss}
-    
-class SeedPreservingReconstructionLoss(Loss):
-    """
-    Reconstruction Loss with increased penalty for deviations in the center seed region.
-    This helps prevent the model from collapsing the seed to white when training backwards.
-    Can use any loss function (L1, MSE, etc.) as the base reconstruction loss.
-    """
-    def __init__(self, loss_fn=None, seed_weight=10.0, seed_radius=3, overflow_loss=False, overflow_weight=1.0, backward_seed_weight=None):
-        super().__init__()
-        self.seed_weight = seed_weight
-        self.backward_seed_weight = backward_seed_weight if backward_seed_weight is not None else seed_weight * 10  # Much higher weight for backward
-        self.seed_radius = seed_radius
-        self.overflow_loss = overflow_loss
-        self.overflow_weight = overflow_weight
-        
-        # Use provided loss function or default to MSE
-        if loss_fn is None:
-            self.loss_fn = nn.MSELoss(reduction='none')
-            self.loss_name = "mse"
-        else:
-            self.loss_fn = loss_fn
-            # Try to determine loss name from the loss function type
-            if isinstance(loss_fn, nn.L1Loss):
-                self.loss_name = "l1"
-            elif isinstance(loss_fn, nn.MSELoss):
-                self.loss_name = "mse"
-            else:
-                self.loss_name = "reconstruction"
-    
-    def create_seed_mask(self, height, width, device):
-        """Create a circular mask centered on the image."""
-        center_y, center_x = height // 2, width // 2
-        y, x = torch.meshgrid(torch.arange(height, device=device), 
-                             torch.arange(width, device=device), indexing='ij')
-        distance = torch.sqrt((y - center_y)**2 + (x - center_x)**2)
-        seed_mask = (distance <= self.seed_radius).float()
-        return seed_mask
-    
-    def forward(self, predictions, targets):
-        batch_size, _, height, width = predictions.shape
-        target_channels = targets.shape[1]
-        device = predictions.device
-        
-        # Standard reconstruction loss (only on target channels)
-        pred_target_channels = predictions[:, :target_channels]
-        loss_per_pixel = self.loss_fn(pred_target_channels, targets)
-        
-        # Create seed mask for center region
-        seed_mask = self.create_seed_mask(height, width, device)
-        seed_mask = seed_mask.unsqueeze(0).unsqueeze(0).expand(batch_size, target_channels, -1, -1)
-        
-        # Detect if this is backward training (target is mostly a colored cross pattern)
-        # Check if target has very few non-black pixels (indicating it's a cross seed)
-        target_magnitude = targets.sum(dim=1, keepdim=True)  # Sum across RGB channels
-        non_zero_pixels = (target_magnitude > 0.1).float().sum(dim=(2, 3))  # Count non-black pixels
-        total_pixels = height * width
-        is_backward = (non_zero_pixels < total_pixels * 0.05).float()  # Less than 5% of pixels are colored
-        
-        # Choose seed weight based on direction
-        current_seed_weight = (1 - is_backward) * self.seed_weight + is_backward * self.backward_seed_weight
-        current_seed_weight = current_seed_weight.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
-        
-        # Apply higher weight to seed region
-        weight_mask = torch.ones_like(seed_mask, device=device)
-        weight_mask = weight_mask + seed_mask * (current_seed_weight - 1.0)
-        
-        # Weighted reconstruction loss
-        weighted_loss = (loss_per_pixel * weight_mask).mean()
-        
-        if self.overflow_loss:
-            # Standard overflow loss
-            img_part = predictions[:, :targets.shape[1]]
-            hidden_part = predictions[:, targets.shape[1]:] if predictions.shape[1] > targets.shape[1] else None
-            
-            img_clamped = img_part.clamp(0, 1.0)
-            overflow_loss_img = (img_part - img_clamped).abs().mean()
-            
-            if hidden_part is not None and hidden_part.numel() > 0:
-                hidden_clamped = hidden_part.clamp(-1.0, 1.0)
-                overflow_loss_hidden = (hidden_part - hidden_clamped).abs().mean()
-            else:
-                overflow_loss_hidden = torch.tensor(0.0, device=device)
-            
-            overflow_loss = overflow_loss_img + overflow_loss_hidden
-            total_loss = weighted_loss + self.overflow_weight * overflow_loss
-            
-            return {"total_loss": total_loss, f"{self.loss_name}_loss": weighted_loss, "overflow_loss": overflow_loss}
-        
-        return {"total_loss": weighted_loss, f"{self.loss_name}_loss": weighted_loss}
-
 
 class MajorityVotingClassificationLoss(Loss):
     """

@@ -1,3 +1,4 @@
+import torch.nn as nn
 from nca.core.losses.loss_functions import (
     ReconstructionLoss,
     VGGStyleOTLoss,
@@ -6,64 +7,46 @@ from nca.core.losses.loss_functions import (
     LPIPSLoss,
     TotalAgreementLoss,
     OverflowLoss,
-    SeedPreservingReconstructionLoss,
     L1Loss,
     ImageCrossEntropyLoss
 )
 from nca.utils.config import Config
 
+# Registry of all available metrics.
+# Key -> factory function (device: str) -> Loss
+# To add a new metric: add an entry here. create_metric and tests pick it up automatically.
+METRIC_REGISTRY = {
+    "mse":   lambda device: ReconstructionLoss(),
+    "mae":   lambda device: ReconstructionLoss(loss_fn=nn.L1Loss()),
+    "vgg":   lambda device: VGGStyleOTLoss(device=device),
+    "p_ce":  lambda device: PixelCrossEntropyLoss(),
+    "acc":   lambda device: PixelAccuracyLoss(),
+    "ta":    lambda device: TotalAgreementLoss(),
+    "lpips": lambda device: LPIPSLoss(device=device),
+}
+
+# Registry of all available training loss functions.
+# Key -> factory function (config: Config) -> Loss
+# To add a new loss: add an entry here. create_loss_fn and tests pick it up automatically.
+LOSS_FN_REGISTRY = {
+    "mse":      lambda cfg: ReconstructionLoss(overflow_loss=cfg.TRAINING.OVERFLOW_LOSS),
+    "l1":       lambda cfg: L1Loss(overflow_loss=cfg.TRAINING.OVERFLOW_LOSS, config=cfg),
+    "lpips":    lambda cfg: LPIPSLoss(device=cfg.DEVICE),
+    "vggstyle": lambda cfg: VGGStyleOTLoss(device=cfg.DEVICE, overflow_loss=cfg.TRAINING.OVERFLOW_LOSS),
+    "p_ce":     lambda cfg: PixelCrossEntropyLoss(),
+    "i_ce":     lambda cfg: ImageCrossEntropyLoss(overflow_loss=cfg.TRAINING.OVERFLOW_LOSS),
+    "overflow": lambda cfg: OverflowLoss(overflow_weight=cfg.TRAINING.OVERFLOW_LOSS),
+}
+
+
 def create_metric(metric: str, device: str = "cuda"):
-    if metric == "mse":
-        return ReconstructionLoss()
-    elif metric == "mae":
-        import torch.nn as nn
-        return ReconstructionLoss(loss_fn=nn.L1Loss())
-    elif metric == "vgg":
-        return VGGStyleOTLoss(device=device)
-    elif metric == "p_ce":
-        return PixelCrossEntropyLoss()
-    elif metric == "acc":
-        return PixelAccuracyLoss()
-    elif metric == "ta":
-        return TotalAgreementLoss()
-    elif metric == "lpips":
-        return LPIPSLoss(device=device)
-    else:
-        raise ValueError(f"Invalid metric: {metric}")
-    
+    if metric not in METRIC_REGISTRY:
+        raise ValueError(f"Invalid metric: '{metric}'. Valid options: {sorted(METRIC_REGISTRY)}")
+    return METRIC_REGISTRY[metric](device)
 
 
 def create_loss_fn(config: Config):
-    if config.TRAINING.LOSS_FN == "mse":
-        return ReconstructionLoss(overflow_loss=config.TRAINING.OVERFLOW_LOSS)
-    elif config.TRAINING.LOSS_FN == "seed_preserving_l1":
-        import torch.nn as nn
-        return SeedPreservingReconstructionLoss(
-            loss_fn=nn.L1Loss(reduction='none'),
-            seed_weight=getattr(config.TRAINING, 'SEED_WEIGHT', 10.0),
-            seed_radius=getattr(config.TRAINING, 'SEED_RADIUS', 3),
-            overflow_loss=config.TRAINING.OVERFLOW_LOSS,
-            backward_seed_weight=getattr(config.TRAINING, 'BACKWARD_SEED_WEIGHT', None)
-        )
-    elif config.TRAINING.LOSS_FN == "seed_preserving_mse":
-        import torch.nn as nn
-        return SeedPreservingReconstructionLoss(
-            loss_fn=nn.MSELoss(reduction='none'),  # Default to MSE if not specified
-            seed_weight=getattr(config.TRAINING, 'SEED_WEIGHT', 10.0),
-            seed_radius=getattr(config.TRAINING, 'SEED_RADIUS', 3),
-            overflow_loss=config.TRAINING.OVERFLOW_LOSS
-        )
-    elif config.TRAINING.LOSS_FN == "l1":
-        return L1Loss(overflow_loss=config.TRAINING.OVERFLOW_LOSS, config=config)
-    elif config.TRAINING.LOSS_FN == "p_ce":
-        return PixelCrossEntropyLoss()
-    elif config.TRAINING.LOSS_FN == "lpips":
-        return LPIPSLoss(device=config.DEVICE)
-    elif config.TRAINING.LOSS_FN == "vggstyle":
-        return VGGStyleOTLoss(device=config.DEVICE, overflow_loss=config.TRAINING.OVERFLOW_LOSS)
-    elif config.TRAINING.LOSS_FN == "i_ce":
-        return ImageCrossEntropyLoss(overflow_loss=config.TRAINING.OVERFLOW_LOSS)
-    elif config.TRAINING.LOSS_FN == "overflow":
-        return OverflowLoss(overflow_weight=config.TRAINING.OVERFLOW_LOSS)
-    else:
-        raise ValueError("Invalid loss function")
+    key = config.TRAINING.LOSS_FN
+    if key not in LOSS_FN_REGISTRY:
+        raise ValueError(f"Invalid loss function: '{key}'. Valid options: {sorted(LOSS_FN_REGISTRY)}")
+    return LOSS_FN_REGISTRY[key](config)

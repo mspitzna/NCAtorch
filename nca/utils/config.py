@@ -96,9 +96,9 @@ class TrainingConfig(BaseModel):
     @field_validator("LOSS_FN")
     @classmethod
     def check_loss_fn(cls, value):
-        valid_loss_fns = ["mse", "l2", "vggstyle", "p_ce", "i_ce", "overflow", "seed_preserving_mse", "seed_preserving_l1", "lpips", "l1"]
-        if value not in valid_loss_fns:
-            raise ValueError(f'LOSS_FN must be one of {valid_loss_fns}.')
+        from nca.core.losses.loss_factory import LOSS_FN_REGISTRY
+        if value not in LOSS_FN_REGISTRY:
+            raise ValueError(f'LOSS_FN must be one of {sorted(LOSS_FN_REGISTRY)}.')
         return value
 
     @field_validator("LR_SCHEDULE_MODE")
