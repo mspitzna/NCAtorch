@@ -5,31 +5,22 @@
 
 ---
 
-## 🛠️ Overview
+## Overview
 
-Custom perceptions let you experiment with novel neighborhood operators while keeping the rest of the CA stack unchanged. Build the module, register it with the factory, then expose it through the config system.
+Custom perceptions let you experiment with novel neighborhood operators while keeping the rest of the CA stack unchanged. There are only two steps: implement the module and add one line to the registry. The config validator and tests update themselves automatically.
 
-## Step 1 – Implement the perception (`nca/core/models/ca/perceptions.py`)
+## Step 1 – Implement the perception ([nca/core/models/ca/perceptions.py](../nca/core/models/ca/perceptions.py))
 
-1. Create a class that inherits from `Perception` (or `nn.Module`) and implements `forward` plus `get_out_channel`.
-2. Accept runtime kwargs such as `in_channel`, `out_channel`, `kernel_size`, and `device`. Most built-in perceptions store these values as attributes so they can size convolutions or buffers correctly.
-3. Use the following skeleton as a reference:
+Create a class that inherits from `Perception` (or `nn.Module`) and implements `forward` and `get_out_channel`.
 
 ```python
 class MyCustomPerception(Perception):
     def __init__(self, in_channel=16, out_channel=64, kernel_size=3, device="cpu"):
         super().__init__()
-        self.in_channel = in_channel
         self.out_channel = out_channel
-        self.kernel_size = kernel_size
-        self.device = device
-
         self.filter = nn.Conv2d(
-            in_channel,
-            out_channel,
-            kernel_size=kernel_size,
-            padding="same",
-            padding_mode="circular",
+            in_channel, out_channel, kernel_size=kernel_size,
+            padding="same", padding_mode="circular",
         )
 
     def forward(self, x):
@@ -39,47 +30,36 @@ class MyCustomPerception(Perception):
         return self.out_channel
 ```
 
-Need extra utilities like buffers or visualization hooks? Mirror the patterns used by `SobelPerception` or `DeformableConvPerception`.
+The `in_channel` argument is the CA state channel count (e.g. `CHANNEL_N`). `get_out_channel()` must match the actual channel dimension returned by `forward()` — this is verified by the exhaustive registry tests.
 
-## Step 2 – Register it in the factory (`nca/core/models/model_factory.py`)
+For more complex patterns (fixed Sobel-style filters, learnable deformable offsets, etc.) see `SobelPerception` or `DeformableConvPerception` in the same file.
 
-1. Import your class near the existing perception imports:
+## Step 2 – Add one entry to the registry ([nca/core/models/perception_factory.py](../nca/core/models/perception_factory.py))
 
-```python
-from .ca.perceptions import MyCustomPerception
-```
-
-2. Extend the `create_perception` helper inside `get_perception` so the new `MODE` string instantiates your class:
+Import your class and add a lambda to `PERCEPTION_REGISTRY`:
 
 ```python
-elif mode == "my_custom":
-    return MyCustomPerception(
-        in_channel=in_channel_n,
-        out_channel=out_channel,
-        kernel_size=kernel_size,
-        device=device,
-    )
+from nca.core.models.ca.perceptions import ..., MyCustomPerception
+
+PERCEPTION_REGISTRY = {
+    # ... existing entries ...
+    "my_custom": lambda in_ch, cfg, dev: MyCustomPerception(
+        in_channel=in_ch,
+        out_channel=cfg.OUT_CHANNEL,
+        kernel_size=cfg.KERNEL_SIZE,
+        device=dev,
+    ),
+}
 ```
 
-3. Nothing else is required: `get_perception` already wraps multiple entries in `MultiPerception`, so your branch will automatically concatenate with others when listed together.
+The lambda receives `(in_channels: int, perception_cfg: PerceptionConfig, device: str)`. Use `cfg.*` to access any `PerceptionConfig` field — add new fields to `PerceptionConfig` in [nca/utils/config.py](../nca/utils/config.py) if your module needs custom hyperparameters.
 
-## Step 3 – Expose the mode in the config (`nca/utils/config.py`)
+**That's it.** Two things happen automatically:
 
-1. Update the `PerceptionConfig` validator so your identifier passes validation:
+- The `PerceptionConfig.MODE` validator imports `PERCEPTION_REGISTRY` at runtime, so `"my_custom"` becomes a valid value immediately — no manual list to update.
+- The exhaustive perception tests in `tests/test_perception_factory.py` are driven by `PERCEPTION_REGISTRY`, so your new entry is covered on the next test run. If `forward()` returns the wrong shape or gradients don't flow, a test will fail.
 
-```python
-valid_modes = [
-    "conv",
-    "attention",
-    "sobel",
-    "deformable_conv",
-    "residual_conv",
-    "my_custom",
-]
-```
-
-2. Introduce additional fields (and validators) in `PerceptionConfig` if your module needs custom hyperparameters.
-3. Reference the perception via the `MODE` field:
+## Step 3 – Use it in a config YAML
 
 ```yaml
 MODEL:
@@ -89,8 +69,17 @@ MODEL:
       OUT_CHANNEL: 96
 ```
 
-Listing multiple entries will run each perception in parallel and concatenate their outputs. The factory automatically sums their `OUT_CHANNEL` values via `perception_module.get_out_channel()` and feeds that number into the update model, so you only need to decide how many filters each branch should emit.
+Listing multiple entries runs each perception in parallel and concatenates their outputs. The factory sums `get_out_channel()` across all branches and passes the total to the update model automatically.
+
+```yaml
+MODEL:
+  PERCEPTIONS:
+    - MODE: "conv"
+      OUT_CHANNEL: 48
+    - MODE: "my_custom"
+      OUT_CHANNEL: 48   # update model receives 96 total
+```
 
 ---
 
-With those three touchpoints wired up, rerun your training script and the new perception should slot into the CA pipeline just like the built-in modules.
+With those two touchpoints wired up, rerun your training script and the new perception slots into the CA pipeline like any built-in module.
