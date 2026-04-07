@@ -48,6 +48,13 @@ class AdversarialTrainer(BaseTrainer):
         # This counter tracks steps to decide when to update the generator
         self.step_counter = 0
 
+        # Separate GradScaler for the critic (recommended for GANs)
+        self.d_scaler = (
+            torch.amp.GradScaler(self.device)
+            if self.config.TRAINING.MIXED_PRECISION
+            else None
+        )
+
         # Initialize reconstruction loss based on config
         recon_loss_type = self.config.TRAINING.LOSS_FN
         if recon_loss_type == "lpips":
@@ -125,13 +132,13 @@ class AdversarialTrainer(BaseTrainer):
             # Backward pass and optimizer step for the Critic
             d_optimizer_step_ran = True
             if self.config.TRAINING.MIXED_PRECISION:
-                scale_before = self.scaler.get_scale()
-                self.scaler.scale(d_loss).backward()
-                self.scaler.unscale_(self.d_optimizer)
+                scale_before = self.d_scaler.get_scale()
+                self.d_scaler.scale(d_loss).backward()
+                self.d_scaler.unscale_(self.d_optimizer)
                 torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=self.config.TRAINING.GRADIENT_CLIPPING_NORM)
-                self.scaler.step(self.d_optimizer)
-                self.scaler.update()
-                scale_after = self.scaler.get_scale()
+                self.d_scaler.step(self.d_optimizer)
+                self.d_scaler.update()
+                scale_after = self.d_scaler.get_scale()
                 # Skip LR scheduling if the optimizer step was dropped because of overflow.
                 d_optimizer_step_ran = scale_after >= scale_before
             else:
