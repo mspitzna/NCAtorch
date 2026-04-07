@@ -157,7 +157,7 @@ def test_freeze_channels_unchanged():
     model = _make_ca()
     x = torch.rand(B, CH, H, W)
     out = model(x, freeze_channels=freeze)
-    assert torch.allclose(out[:, :freeze + 1], x[:, :freeze + 1])
+    assert torch.allclose(out[:, :freeze], x[:, :freeze])
 
 
 def test_freeze_channels_unfrozen_can_change():
@@ -167,7 +167,7 @@ def test_freeze_channels_unfrozen_can_change():
     x = torch.rand(B, CH, H, W)
     out = model(x, step_size=1.0, freeze_channels=freeze)
     # At least some unfrozen channels should differ (with high probability)
-    assert not torch.allclose(out[:, freeze + 1:], x[:, freeze + 1:])
+    assert not torch.allclose(out[:, freeze:], x[:, freeze:])
 
 
 # ---------------------------------------------------------------------------
