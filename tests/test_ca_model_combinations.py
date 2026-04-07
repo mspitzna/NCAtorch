@@ -10,6 +10,7 @@ automatically covered. Tests verify:
   - LatentWrapper.evolve_in_latent_space preserves pixel-space shape
 """
 
+import types
 import pytest
 import torch
 from unittest.mock import MagicMock, patch
@@ -20,7 +21,7 @@ from nca.core.models.perception_factory import PERCEPTION_REGISTRY
 from nca.core.models.update_model_factory import UPDATE_MODEL_REGISTRY
 from nca.core.models.latent_wrapper import LatentWrapper
 from nca.core.models.auto_encoder.ae import AutoEncoder
-from nca.utils.config import PerceptionConfig
+from nca.utils.config import PerceptionConfig, ModelConfig
 
 # ---------------------------------------------------------------------------
 # Shared dims — CA model (state space)
@@ -56,11 +57,7 @@ def _percep_cfg(mode: str, out_channel: int = PERC_OUT) -> PerceptionConfig:
 
 
 def _update_cfg():
-    cfg = MagicMock()
-    cfg.MODEL.HIDDEN_CHANNELS = [32]
-    cfg.MODEL.RESNET_BLOCKS = 2
-    cfg.MODEL.FINAL_ACTIVATION = False
-    return cfg
+    return types.SimpleNamespace(MODEL=ModelConfig(HIDDEN_CHANNELS=[32], RESNET_BLOCKS=2))
 
 
 def _make_ca(perc_key: str, update_key: str, in_ch: int = CH,

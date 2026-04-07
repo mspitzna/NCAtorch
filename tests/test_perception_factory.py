@@ -14,7 +14,6 @@ Compliance contract for every perception:
 
 import pytest
 import torch
-from unittest.mock import MagicMock
 
 from nca.core.models.perception_factory import PERCEPTION_REGISTRY
 from nca.utils.config import PerceptionConfig
@@ -25,8 +24,6 @@ from nca.utils.config import PerceptionConfig
 
 B, IN_CH, H, W = 2, 16, 16, 16
 OUT_CH = 32   # perception output channels (not used by sobel)
-UPDATE_IN_CH  = 80
-UPDATE_OUT_CH = 16
 
 
 # ---------------------------------------------------------------------------
@@ -44,14 +41,6 @@ def _percep_cfg(mode: str) -> PerceptionConfig:
         USE_LAYER_NORM=True,
         INCLUDE_FFN=True,
     )
-
-
-def _update_model_config():
-    cfg = MagicMock()
-    cfg.MODEL.HIDDEN_CHANNELS = [32]
-    cfg.MODEL.RESNET_BLOCKS = 2
-    cfg.MODEL.FINAL_ACTIVATION = False
-    return cfg
 
 
 # ---------------------------------------------------------------------------

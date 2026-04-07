@@ -12,9 +12,9 @@ Compliance contract for every loss:
   - gradients flow back through 'total_loss'
 """
 
+import types
 import pytest
 import torch
-from unittest.mock import MagicMock
 
 from nca.core.losses.loss_factory import (
     create_metric,
@@ -22,6 +22,7 @@ from nca.core.losses.loss_factory import (
     METRIC_REGISTRY,
     LOSS_FN_REGISTRY,
 )
+from nca.utils.config import TrainingConfig
 
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
@@ -64,14 +65,10 @@ _LOSS_FN_INPUTS = {
 
 
 def _make_config(loss_fn_key, overflow=False):
-    cfg = MagicMock()
-    cfg.TRAINING.LOSS_FN = loss_fn_key
-    cfg.TRAINING.OVERFLOW_LOSS = overflow
-    cfg.TRAINING.OVERFLOW_WEIGHT = 1.0
-    cfg.TRAINING.LPIPS_NET = "alex"
-    cfg.TRAINING.VGG_PROJ_N = 32
-    cfg.DEVICE = "cpu"
-    return cfg
+    return types.SimpleNamespace(
+        TRAINING=TrainingConfig(LOSS_FN=loss_fn_key, OVERFLOW_LOSS=overflow),
+        DEVICE="cpu",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -132,5 +129,5 @@ def test_loss_fn_registry_gradients(key):
 
 
 def test_loss_fn_registry_invalid_key_raises():
-    with pytest.raises(ValueError):
-        create_loss_fn(_make_config("not_a_real_loss"))
+    with pytest.raises(Exception):
+        TrainingConfig(LOSS_FN="not_a_real_loss")

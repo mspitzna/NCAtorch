@@ -10,19 +10,18 @@ Compliance contract for every update model:
   - gradients flow back through forward()
 """
 
+import types
 import pytest
 import torch
-from unittest.mock import MagicMock
 
 from nca.core.models.update_model_factory import UPDATE_MODEL_REGISTRY
-from nca.utils.config import PerceptionConfig
+from nca.utils.config import ModelConfig
 
 # ---------------------------------------------------------------------------
 # Shared dims
 # ---------------------------------------------------------------------------
 
-B, IN_CH, H, W = 2, 16, 16, 16
-OUT_CH = 32   # perception output channels (not used by sobel)
+B, H, W = 2, 16, 16
 UPDATE_IN_CH  = 80
 UPDATE_OUT_CH = 16
 
@@ -31,25 +30,8 @@ UPDATE_OUT_CH = 16
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _percep_cfg(mode: str) -> PerceptionConfig:
-    return PerceptionConfig(
-        MODE=mode,
-        OUT_CHANNEL=OUT_CH,
-        KERNEL_SIZE=3,
-        NUM_HEADS=4,
-        EMBED_DIM=OUT_CH,   # must be divisible by NUM_HEADS
-        USE_REL_POS_BIAS=True,
-        USE_LAYER_NORM=True,
-        INCLUDE_FFN=True,
-    )
-
-
 def _update_model_config():
-    cfg = MagicMock()
-    cfg.MODEL.HIDDEN_CHANNELS = [32]
-    cfg.MODEL.RESNET_BLOCKS = 2
-    cfg.MODEL.FINAL_ACTIVATION = False
-    return cfg
+    return types.SimpleNamespace(MODEL=ModelConfig(HIDDEN_CHANNELS=[32], RESNET_BLOCKS=2))
 
 # ---------------------------------------------------------------------------
 # UPDATE_MODEL_REGISTRY — exhaustive compliance tests

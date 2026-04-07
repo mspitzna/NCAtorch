@@ -10,44 +10,43 @@ Compliance contract for every latent encoder:
 VAE inference_only=False is skipped — it loads a pretrained VGG19 network.
 """
 
+import types
 import pytest
 import torch
 import torch.nn as nn
-from unittest.mock import MagicMock
 
 from nca.core.models.latent_encoder_factory import (
     LATENT_ENCODER_REGISTRY,
     create_latent_encoder,
 )
+from nca.utils.config import LatentConfig, TrainingConfig
 
 # ---------------------------------------------------------------------------
-# Minimal config mock
+# Minimal config using real Pydantic models so defaults and validators run
 # ---------------------------------------------------------------------------
 
-IN_CH   = 4
-OUT_CH  = 4
-LATENT  = 8
-COMP    = 1   # 2^1 = 2x spatial compression — keeps tensors small in tests
+IN_CH  = 4
+OUT_CH = 4
+LATENT = 8
+COMP   = 1   # 2^1 = 2× spatial compression — keeps tensors small in tests
 
 
 def _make_config(encoder_type: str):
-    cfg = MagicMock()
-    cfg.LATENT_TRAINING.ENCODER_TYPE    = encoder_type
-    cfg.LATENT_TRAINING.LATENT_AE_IN_CHANNEL  = IN_CH
-    cfg.LATENT_TRAINING.LATENT_AE_OUT_CHANNEL = OUT_CH
-    cfg.LATENT_TRAINING.LATENT_AE_CHANNEL     = LATENT
-    cfg.LATENT_TRAINING.LATENT_AE_COMPRESSION = COMP
-    # VAE-specific
-    cfg.LATENT_TRAINING.VAE_BASE_CHANNELS  = 16
-    cfg.LATENT_TRAINING.VAE_NUM_DOWNSAMPLES = 1
-    cfg.LATENT_TRAINING.VAE_NORM_GROUPS    = 4
-    cfg.LATENT_TRAINING.VAE_KL_BETA        = 1.0
-    cfg.LATENT_TRAINING.VAE_RECON_LOSS_TYPE   = "l1"
-    cfg.LATENT_TRAINING.VAE_RECON_LOSS_WEIGHT = 1.0
-    cfg.LATENT_TRAINING.VAE_VGG_LOSS_WEIGHT   = 1.0
-    # AE-specific
-    cfg.TRAINING.OVERFLOW_LOSS = False
-    return cfg
+    latent = LatentConfig(
+        ENCODER_TYPE=encoder_type,
+        LATENT_AE_IN_CHANNEL=IN_CH,
+        LATENT_AE_OUT_CHANNEL=OUT_CH,
+        LATENT_AE_CHANNEL=LATENT,
+        LATENT_AE_COMPRESSION=COMP,
+        VAE_BASE_CHANNELS=16,
+        VAE_NUM_DOWNSAMPLES=1,
+        VAE_NORM_GROUPS=4,
+        VQVAE_NUM_EMBEDDINGS=64,
+    )
+    return types.SimpleNamespace(
+        LATENT_TRAINING=latent,
+        TRAINING=TrainingConfig(),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -97,13 +96,23 @@ def test_encode_gradients_flow(key):
 # ---------------------------------------------------------------------------
 
 def test_ae_full_returns_criterion():
-    """AE with inference_only=False must return a non-None criterion."""
+    """AE with inference_only=False must return a non-None criterion and no kl_beta."""
     cfg = _make_config("AE")
     model, criterion, kl_beta = create_latent_encoder(cfg, "cpu", inference_only=False)
 
     assert isinstance(model, nn.Module)
     assert isinstance(criterion, nn.Module), "AE criterion must be an nn.Module"
     assert kl_beta is None, "AE does not use kl_beta"
+
+
+def test_vqvae_full_returns_criterion():
+    """VQVAE with inference_only=False must return a non-None criterion and no kl_beta."""
+    cfg = _make_config("VQVAE")
+    model, criterion, kl_beta = create_latent_encoder(cfg, "cpu", inference_only=False)
+
+    assert isinstance(model, nn.Module)
+    assert isinstance(criterion, nn.Module), "VQVAE criterion must be an nn.Module"
+    assert kl_beta is None, "VQVAE does not use kl_beta"
 
 
 def test_vae_full_returns_criterion():
@@ -116,7 +125,5 @@ def test_vae_full_returns_criterion():
 # ---------------------------------------------------------------------------
 
 def test_invalid_encoder_type_raises():
-    cfg = _make_config("AE")
-    cfg.LATENT_TRAINING.ENCODER_TYPE = "not_a_real_encoder"
     with pytest.raises(ValueError):
-        create_latent_encoder(cfg, "cpu")
+        LatentConfig(ENCODER_TYPE="not_a_real_encoder")

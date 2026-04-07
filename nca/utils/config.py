@@ -243,6 +243,9 @@ class LatentConfig(BaseModel):
     VAE_RECON_LOSS_TYPE: str = "l1"  # Type of reconstruction loss for VAE: "l1" or "mse"
     VAE_RECON_LOSS_WEIGHT: float = 1.0  # Weight for reconstruction loss in VAE
     VAE_VGG_LOSS_WEIGHT: float = 1.0  # Weight for VGG loss in VAE
+    VQVAE_NUM_EMBEDDINGS: int = 512
+    VQVAE_COMMITMENT_COST: float = 0.25
+
     @field_validator("ENCODER_TYPE")
     @classmethod
     def check_encoder_type(cls, value):
@@ -294,8 +297,6 @@ class Config(BaseModel):
         """Perform cross-field validation after model initialization."""
         # Validate latent training configuration
         if self.LATENT_TRAINING.ENABLED:
-            if self.LATENT_TRAINING.ENCODER_TYPE not in ["AE", "VAE"]:
-                raise ValueError("When LATENT_TRAINING.ENABLED=True, ENCODER_TYPE must be 'AE' or 'VAE'")
             if self.LATENT_TRAINING.LATENT_AE_COMPRESSION < 1:
                 raise ValueError("LATENT_AE_COMPRESSION must be >= 1")
         

@@ -2,6 +2,7 @@ import torch.nn as nn
 from nca.utils.config import Config
 from nca.core.models.auto_encoder.ae import AutoEncoder
 from nca.core.models.auto_encoder.vae import VAE
+from nca.core.models.auto_encoder.vqvae import VQVAE
 from nca.core.losses.loss_functions import VGGLoss, ReconstructionLoss
 
 # Registry for VAE reconstruction loss types.
@@ -53,6 +54,20 @@ LATENT_ENCODER_REGISTRY = {
         ).to(device),
         None if inference_only else _vae_criterion(cfg, device),
         cfg.LATENT_TRAINING.VAE_KL_BETA,
+    ),
+    "VQVAE": lambda cfg, device, inference_only: (
+        VQVAE(
+            in_channels=cfg.LATENT_TRAINING.LATENT_AE_IN_CHANNEL,
+            out_channels=cfg.LATENT_TRAINING.LATENT_AE_OUT_CHANNEL,
+            latent_channels=cfg.LATENT_TRAINING.LATENT_AE_CHANNEL,
+            num_embeddings=cfg.LATENT_TRAINING.VQVAE_NUM_EMBEDDINGS,
+            commitment_cost=cfg.LATENT_TRAINING.VQVAE_COMMITMENT_COST,
+            base_channels=cfg.LATENT_TRAINING.VAE_BASE_CHANNELS,
+            num_downsamples=cfg.LATENT_TRAINING.VAE_NUM_DOWNSAMPLES,
+            norm_groups=cfg.LATENT_TRAINING.VAE_NORM_GROUPS,
+        ).to(device),
+        None if inference_only else ReconstructionLoss(overflow_loss=cfg.TRAINING.OVERFLOW_LOSS),
+        None,
     ),
 }
 

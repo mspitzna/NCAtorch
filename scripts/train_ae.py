@@ -194,10 +194,18 @@ def main():
                 outputs, batch, mu, logvar, current_beta, reconstruction_criterion
             )
             latent_shape_log = latent_z.shape # Log shape of sampled z
+        elif model_type == "VQVAE":
+            outputs, vq_loss, _ = model(batch)
+            loss_dict = reconstruction_criterion(outputs, batch)
+            loss = loss_dict["total_loss"] + vq_loss
+            recon_loss_val = loss_dict["total_loss"].item()
+            kld_loss_val = vq_loss.item()  # reuse kld slot for commitment/codebook loss
+            latent_shape_log = model.encode(batch).shape
         else: # AE
             outputs, _, latent = model(batch) # AE returns fewer items
-            loss = reconstruction_criterion(outputs, batch) # Use standard mean MSE for AE
-            recon_loss_val = loss.item() # Store item for accumulation
+            loss_dict = reconstruction_criterion(outputs, batch)
+            loss = loss_dict["total_loss"]
+            recon_loss_val = loss.item()
             kld_loss_val = 0.0 # No KL loss for AE
             latent_shape_log = latent.shape # Log shape of deterministic latent
 
