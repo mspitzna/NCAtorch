@@ -8,13 +8,20 @@ class PerceptionConfig(BaseModel):
     KERNEL_SIZE: int = 3
     DILATION: int = 1
     OUT_CHANNEL: int = 80
+    # attention / mh_attention
+    NUM_HEADS: int = 4
+    EMBED_DIM: int = 128
+    USE_REL_POS_BIAS: bool = True
+    # mh_attention only
+    USE_LAYER_NORM: bool = True
+    INCLUDE_FFN: bool = True
 
     @field_validator("MODE")
     @classmethod
     def check_mode(cls, value):
-        valid_modes = ["conv", "attention", "sobel", "deformable_conv", "residual_conv", "mh_attention"]
-        if value not in valid_modes:
-            raise ValueError(f'mode must be one of {valid_modes}.')
+        from nca.core.models.perception_factory import PERCEPTION_REGISTRY
+        if value not in PERCEPTION_REGISTRY:
+            raise ValueError(f"MODE must be one of {sorted(PERCEPTION_REGISTRY)}.")
         return value
 
     @field_validator("OUT_CHANNEL")
@@ -59,9 +66,9 @@ class ModelConfig(BaseModel):
     @field_validator("NAME")
     @classmethod
     def check_model_name(cls, value):
-        valid_models = ["MLP", "ResNet"]
-        if value not in valid_models:
-            raise ValueError(f"MODEL.NAME must be one of {valid_models}.")
+        from nca.core.models.update_model_factory import UPDATE_MODEL_REGISTRY
+        if value not in UPDATE_MODEL_REGISTRY:
+            raise ValueError(f"MODEL.NAME must be one of {sorted(UPDATE_MODEL_REGISTRY)}.")
         return value
 
     @model_validator(mode='after')

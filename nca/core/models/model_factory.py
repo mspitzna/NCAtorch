@@ -1,16 +1,7 @@
 import torch.nn as nn
-from nca.utils.config import Config, PerceptionConfig
+from nca.utils.config import Config
 from nca.core.models.auto_encoder.ae import AutoEncoder
 from nca.core.models.auto_encoder.vae import VAE
-from .ca.perceptions import (
-    AttentionPerception,
-    ConvPerception,
-    SobelPerception,
-    DeformableConvPerception,
-    ResidualConvPerception,
-    MultiPerception,
-    MultiHeadAttentionPerception
-)
 from .ca.state_updates import (
     ApplyDelta,
     ClampOutput,
@@ -19,14 +10,14 @@ from .ca.state_updates import (
     NoiseInjection,
     StateUpdatePipeline,
 )
-from nca.core.models.ca.update_models import SimpleMLPUpdate, ResNetUpdate
+from nca.core.models.perception_factory import create_perception_module
+from nca.core.models.update_model_factory import create_update_model
 from nca.core.models.ca.ca_model import CAModel
-from nca.core.losses.loss_functions import VGGLoss, ReconstructionLoss, L1Loss
+from nca.core.losses.loss_functions import VGGLoss, ReconstructionLoss
 
 
 def create_model(config: Config, cond_dim, img_height, img_width):
     device = config.DEVICE
-    use_positional_embeddings = config.MODEL.USE_POSITIONAL_EMBEDDINGS
 
     def get_img_dims(height, width, compression):
         factor = pow(2, compression)
@@ -40,161 +31,38 @@ def create_model(config: Config, cond_dim, img_height, img_width):
     else:
         channel_out = config.MODEL.CHANNEL_OUT
 
-    perception_module = get_perception(config, cond_dim, device)
-    update_model = get_update_model(config, perception_module.get_out_channel(), channel_out, device)
+    perception_module = create_perception_module(config, cond_dim, device)
+    update_model = create_update_model(config, perception_module.get_out_channel(), channel_out, device)
     state_update_pipeline = get_state_update_pipeline(config, device)
 
     ca = CAModel(
         device=device,
-        use_positional_embeddings=use_positional_embeddings,
+        use_positional_embeddings=config.MODEL.USE_POSITIONAL_EMBEDDINGS,
         img_height=img_height,
         img_width=img_width,
         perception_module=perception_module,
         update_model_module=update_model,
         state_update_pipeline=state_update_pipeline
     )
-    
-    # Move to device once after full construction
     return ca.to(device)
 
 
-
 def get_state_update_pipeline(config: Config, device) -> StateUpdatePipeline:
-    state_update_pipeline = []
-    noise_injection = config.MODEL.NOISE_INJECTION
-    fire_rate = config.MODEL.FIRE_RATE
-    clamp_output = config.MODEL.CLAMP_OUTPUT
+    pipeline = []
 
-    if config.LATENT_TRAINING.ENABLED:
-        living_mask = False
-        living_mask_index = None
-    else:
-        living_mask = config.MODEL.LIVING_MASK
-        living_mask_index = config.MODEL.LIVING_MASK_INDEX
+    if config.MODEL.NOISE_INJECTION > 0.0:
+        pipeline.append(NoiseInjection(config.MODEL.NOISE_INJECTION))
+    if config.MODEL.FIRE_RATE < 1.0:
+        pipeline.append(FireRateMask(config.MODEL.FIRE_RATE))
 
-    if noise_injection > 0.0:
-        state_update_pipeline.append(NoiseInjection(noise_injection))
-    if fire_rate < 1.0:
-        state_update_pipeline.append(FireRateMask(fire_rate))
-    
-    state_update_pipeline.append(ApplyDelta())
+    pipeline.append(ApplyDelta())
 
-    if living_mask:
-        state_update_pipeline.append(LivingMask(alpha_channel=living_mask_index))
-    if clamp_output:
-        state_update_pipeline.append(ClampOutput())
+    if not config.LATENT_TRAINING.ENABLED and config.MODEL.LIVING_MASK:
+        pipeline.append(LivingMask(alpha_channel=config.MODEL.LIVING_MASK_INDEX))
+    if config.MODEL.CLAMP_OUTPUT:
+        pipeline.append(ClampOutput())
 
-    return StateUpdatePipeline(state_update_pipeline)
-
-
-def get_update_model(config: Config, in_channel_n, channel_out, device):
-    """
-    Create the update model based on the configuration.
-    """
-    model_name = config.MODEL.NAME
-    print(f"Creating {model_name}. The value of in_channel_n is: {in_channel_n}")
-    if model_name == "MLP":
-        model = SimpleMLPUpdate(
-            in_channels=in_channel_n,
-            out_channels=channel_out,
-            hidden_channels=config.MODEL.HIDDEN_CHANNELS,
-            final_activation=config.MODEL.FINAL_ACTIVATION,
-            device=device,
-        )
-        return model.to(device)
-    elif model_name == "ResNet":
-        model = ResNetUpdate(
-            in_channels=in_channel_n,
-            out_channels=channel_out,
-            hidden_channels=config.MODEL.HIDDEN_CHANNELS,
-            num_blocks=config.MODEL.RESNET_BLOCKS,
-            final_activation=config.MODEL.FINAL_ACTIVATION,
-            device=device,
-        )
-        return model.to(device)
-    else:
-        raise ValueError(f"Invalid model name: {model_name}")
-
-def get_perception(config: Config, cond_dim, device):
-    # Determine the number of channels in the state.
-    channel_n = (
-        config.MODEL.CHANNEL_N
-        if not config.LATENT_TRAINING.ENABLED
-        else config.LATENT_TRAINING.LATENT_AE_CHANNEL
-    )
-    in_channel_n = (
-        channel_n
-        #+ (cond_dim if config.LATENT_TRAINING.ENABLED is False else 0)
-        + cond_dim
-        + (2 if config.MODEL.USE_POSITIONAL_EMBEDDINGS else 0)
-    )
-
-    # Helper to create a single perception module from a PerceptionConfig.
-    def create_perception(percep_cfg: PerceptionConfig):
-        mode = percep_cfg.MODE
-        kernel_size = percep_cfg.KERNEL_SIZE
-        # For modes that use dilation, use the provided value.
-        dilation = percep_cfg.DILATION
-        out_channel = percep_cfg.OUT_CHANNEL
-
-        if mode == "attention":
-            return AttentionPerception(
-                in_channel=in_channel_n,
-                out_channel=out_channel,
-                kernel_size=kernel_size,
-            )
-        elif mode == "mh_attention":
-            return MultiHeadAttentionPerception(
-                in_channel=in_channel_n,
-                out_channel=out_channel,
-                kernel_size=kernel_size
-            )
-        elif mode == "sobel":
-            return SobelPerception(
-                in_channel=in_channel_n,
-                device=device,
-            )
-        elif mode == "deformable_conv":
-            return DeformableConvPerception(
-                in_channel=in_channel_n,
-                out_channel=out_channel,
-                kernel_size=kernel_size,
-                device=device,
-            )
-        elif mode == "residual_conv":
-            return ResidualConvPerception(
-                in_channel=in_channel_n,
-                out_channel=out_channel,
-                kernel_size=kernel_size,
-                device=device,
-            )
-        else:
-            # Default to regular convolution perception.
-            return ConvPerception(
-                in_channel=in_channel_n,
-                out_channel=out_channel,
-                kernel_size=kernel_size,
-                device=device,
-                dilation=dilation,
-            )
-
-    # Create perception modules based on the list in config.MODEL.PERCEPTIONS.
-    perception_modules = [create_perception(pc) for pc in config.MODEL.PERCEPTIONS]
-
-    # Create a single module or wrap multiple modules in a MultiPerception.
-    if len(perception_modules) == 1:
-        perception_module = perception_modules[0]
-    else:
-        perception_module = MultiPerception(perception_modules)
-
-    # Log the details of the created perception module.
-    modes = ", ".join([pc.MODE for pc in config.MODEL.PERCEPTIONS])
-    kernel_sizes = ", ".join([str(pc.KERNEL_SIZE) for pc in config.MODEL.PERCEPTIONS])
-    print(
-        f"Perception: {modes} with in_channel_n: {in_channel_n}, "
-        f"out_channel: {perception_module.get_out_channel()}, kernel_sizes: {kernel_sizes}"
-    )
-    return perception_module
+    return StateUpdatePipeline(pipeline)
 
 
 def get_latent_encoder(config: Config, device, inference_only=False):
