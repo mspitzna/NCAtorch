@@ -16,7 +16,8 @@ def create_metric(metric: str, device: str = "cuda"):
     if metric == "mse":
         return ReconstructionLoss()
     elif metric == "mae":
-        return ReconstructionLoss(loss_fn="mae")
+        import torch.nn as nn
+        return ReconstructionLoss(loss_fn=nn.L1Loss())
     elif metric == "vgg":
         return VGGStyleOTLoss(device=device)
     elif metric == "p_ce":
