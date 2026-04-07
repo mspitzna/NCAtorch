@@ -40,29 +40,26 @@ If your work has improved **NCAtorch** and you would like more people to see it,
 
 #### Prerequisites
 
-- Python 3.12 or higher
+- Python 3.10 or higher
+- [uv](https://docs.astral.sh/uv/) package manager
 - CUDA-capable GPU (recommended)
-- PyTorch 2.0+
 
 #### Setup
 
-1. Clone the repository:
+1. Install `uv` (if not already installed):
 ```bash
-git clone https://github.com/mspitzna/NCAtorch.git
-cd nca-torch
-```
-2. (Recommended) Create and activate a virtual environment so the dependencies stay isolated:
-```bash
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-3. Install PyTorch (if not already installed) using the command generated for your system:
-Visit https://pytorch.org/get-started/locally/ for platform-specific instructions.
-
-4. Install the remaining project requirements with the environment active:
+2. Clone the repository:
 ```bash
-pip install -r requirements.txt
+git clone <repo-url>
+cd NCAtorch
+```
+
+3. Install all dependencies (creates `.venv` automatically, pulls the correct PyTorch CUDA build):
+```bash
+uv sync --dev
 ```
 
 ### Training Your First Model
@@ -70,7 +67,16 @@ pip install -r requirements.txt
 Train an NCA model using a configuration file:
 
 ```bash
-python train_scripts/train_ca.py --config config/emoji_config.yaml --device cuda
+ncatorch-train --config config/emoji_config.yaml
+```
+
+For latent space NCA (requires training an autoencoder first):
+```bash
+# Step 1 — train the autoencoder (checkpoint saved to train_log/<run_folder>/ae_checkpoints/)
+ncatorch-train-ae --config config/your_config.yaml
+
+# Step 2 — train the CA, pointing --folder to the AE training log
+ncatorch-train --folder train_log/<run_folder>
 ```
 
 💡 **Tip**: Start with the emoji generation task for quick results and visual feedback!
@@ -80,23 +86,23 @@ python train_scripts/train_ca.py --config config/emoji_config.yaml --device cuda
 Launch the web interface to interact with trained models:
 
 ```bash
-uvicorn app.fastapi_backend:app
+ncatorch-ui
 ```
 
 Then open your browser to `http://localhost:8000`
 
-### Device Selection
-
-By default, the UI auto-detects and uses CUDA when available, falling back to MPS (on macOS) or CPU. 
-
-To force a specific device:
+### Options
 
 ```bash
-# Force CPU execution (also hides CUDA devices from the process)
-NCA_DEVICE=cpu uvicorn app.fastapi_backend:app
+# Force a specific device
+ncatorch-ui --device cuda:0
+ncatorch-ui --device cpu
 
-# Use specific CUDA device
-NCA_DEVICE=cuda:0 uvicorn app.fastapi_backend:app
+# Custom host/port
+ncatorch-ui --host 0.0.0.0 --port 8080
+
+# Auto-reload on code changes (development)
+ncatorch-ui --reload
 ```
 
 ### 📹 Demo Video
@@ -191,13 +197,11 @@ nca-torch/
 
 ## 📚 Documentation
 
-For detailed documentation on:
-- Implementing custom perception modules
-- Loss function implementations
-- Dataset preparation
-- Advanced training techniques
-
-Please refer to the [docs] directory (coming soon).
+| Guide | Description |
+|-------|-------------|
+| [Custom Perception](docs/custom_perception_guide.md) | Add a new neighborhood operator — register one lambda, done |
+| [Custom Update Module](docs/custom_update_module_guide.md) | Add a new update architecture — register one lambda, done |
+| [Custom Dataset](docs/custom_dataset_guide.md) | Add a new dataset and wire it into the training pipeline |
 
 ## 📝 Citation
 

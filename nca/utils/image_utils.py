@@ -4,7 +4,6 @@ import PIL.Image
 import numpy as np
 import torch
 import torch.nn.functional as F
-from IPython.display import Image, display
 import random
 
 
@@ -90,6 +89,7 @@ def imshow(a, fmt="jpeg"):
     Returns:
       None
     """
+    from IPython.display import Image, display  # only available in Jupyter
     display(Image(data=imencode(a, fmt)))
 
 

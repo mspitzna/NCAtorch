@@ -355,7 +355,7 @@ async def get(request: Request):
     Render the base template with available trainlog folders.
     """
     folders = get_trainlog_folders()
-    return templates.TemplateResponse("base.html", {"request": request, "folders": folders})
+    return templates.TemplateResponse(request, "base.html", {"folders": folders})
 
 
 @app.get("/favicon.ico", include_in_schema=False)
@@ -576,7 +576,6 @@ async def dataset_page(request: Request, dataset_type: str):
     if not os.path.exists(os.path.join("app/templates", template_name)):
         template_name = "default.html"
     context = {
-        "request": request,
         "title": f"Dataset Page for {dataset_type}",
         "data": ui_config,
         "model_name": model_name,
@@ -584,7 +583,7 @@ async def dataset_page(request: Request, dataset_type: str):
         "folders": train_folders,
         "current_model_folder": current_model_folder,
     }
-    return templates.TemplateResponse(template_name, context)
+    return templates.TemplateResponse(request, template_name, context)
 
 
 @app.post("/set_speed")
