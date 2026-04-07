@@ -134,6 +134,11 @@ class CAModel(nn.Module, ABC):
         # 3) Concatenate current state + grads, then pass through dmodel
         dx = self.update_model(grads) * step_size
 
+        # When some channels are frozen the state only contains the unfrozen portion,
+        # so dx must be sliced to match before entering the update pipeline.
+        if freeze_channels is not None:
+            dx = dx[:, freeze_channels + 1:]
+
         # 4) Apply update pipeline (noise, fire-rate, add, living mask, clamp, etc.)
         state, dx = self.state_updater(
             state,
