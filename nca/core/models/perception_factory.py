@@ -10,8 +10,21 @@ from nca.core.models.ca.perceptions import (
 )
 
 # Registry of all available perception modules.
-# Key -> factory function (in_channel, percep_cfg, device) -> Perception
-# To add a new perception: add an entry here. Tests and the config validator pick it up automatically.
+#
+# Maps a MODE string to a factory lambda with signature:
+#   (in_channels: int, cfg: PerceptionConfig, device: str) -> Perception
+#
+# Adding a new perception module:
+#   1. Implement the class in nca/core/models/ca/perceptions.py.
+#   2. Add one entry here — the config validator and tests pick it up automatically.
+#
+# Available modules:
+#   "conv"           — standard dilated convolution
+#   "attention"      — single-head local attention with optional relative pos bias
+#   "mh_attention"   — multi-head attention with optional layer-norm and FFN
+#   "sobel"          — fixed Sobel edge-detection filters (no learned parameters)
+#   "deformable_conv"— deformable convolution with learned offsets
+#   "residual_conv"  — residual convolutional block
 PERCEPTION_REGISTRY = {
     "conv": lambda in_ch, cfg, dev: ConvPerception(
         in_ch, cfg.OUT_CHANNEL, cfg.KERNEL_SIZE, dilation=cfg.DILATION, device=dev

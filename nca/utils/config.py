@@ -4,6 +4,23 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class PerceptionConfig(BaseModel):
+    """Configuration for one perception branch.
+
+    Multiple entries under ``MODEL.PERCEPTIONS`` run in parallel; their outputs
+    are concatenated before the update model. Valid ``MODE`` values are the keys
+    of ``PERCEPTION_REGISTRY`` in ``perception_factory.py``.
+
+    Attributes:
+        MODE: Neighbourhood operator.
+        KERNEL_SIZE: Spatial kernel size for convolution-based perceptions.
+        DILATION: Dilation factor for ``conv`` perception.
+        OUT_CHANNEL: Number of output channels (filters) from this branch.
+        NUM_HEADS: Attention heads for ``attention`` / ``mh_attention``.
+        EMBED_DIM: Projection dimension for ``mh_attention``.
+        USE_REL_POS_BIAS: Add relative positional bias in attention layers.
+        USE_LAYER_NORM: Apply layer normalisation in ``mh_attention``.
+        INCLUDE_FFN: Include feed-forward sub-layer in ``mh_attention``.
+    """
     MODE: str = "conv"
     KERNEL_SIZE: int = 3
     DILATION: int = 1
@@ -33,6 +50,26 @@ class PerceptionConfig(BaseModel):
 
 
 class ModelConfig(BaseModel):
+    """Configuration for the CA model architecture.
+
+    Attributes:
+        NAME: Update model architecture — ``MLP`` or ``ResNet``.
+            Valid values are the keys of ``UPDATE_MODEL_REGISTRY``.
+        HIDDEN_CHANNELS: Hidden layer sizes in the update model.
+        CHANNEL_N: Number of CA state channels per cell.
+        CHANNEL_OUT: Output channels after the update step; defaults to
+            ``CHANNEL_N`` if not set.
+        USE_POSITIONAL_EMBEDDINGS: Append learnable (x, y) coordinate channels
+            to the state before perception.
+        LIVING_MASK: Zero out updates for cells below the alive threshold.
+        LIVING_MASK_INDEX: Channel index used to determine cell liveness.
+        NOISE_INJECTION: Std of Gaussian noise added to ``dx`` each step.
+        FINAL_ACTIVATION: Apply Tanh to the update model output.
+        CLAMP_OUTPUT: Clamp state values to ``[-1, 1]`` after each step.
+        FIRE_RATE: Fraction of cells updated per step (stochastic dropout).
+        RESNET_BLOCKS: Number of residual blocks (``ResNet`` only).
+        PERCEPTIONS: List of perception branch configs; outputs are concatenated.
+    """
     NAME: str = "MLP"
     HIDDEN_CHANNELS: List[int] = [64]
     CHANNEL_N: int = 16
@@ -79,6 +116,25 @@ class ModelConfig(BaseModel):
 
 
 class TrainingConfig(BaseModel):
+    """Hyperparameters for the main CA training loop.
+
+    Attributes:
+        BATCH_SIZE: Number of grids per optimisation step.
+        STEPS: Total number of training steps.
+        LOSS_FN: Reconstruction loss key from ``LOSS_FN_REGISTRY`` —
+            ``mse``, ``l1``, ``lpips``, ``vggstyle``, ``p_ce``, ``i_ce``, ``overflow``.
+        OVERFLOW_LOSS: Add an overflow penalty to the loss.
+        OVERFLOW_WEIGHT: Weight applied to the overflow penalty term.
+        LEARNING_RATE: Initial learning rate.
+        WARMUP_STEPS: Linear LR warm-up duration.
+        LR_SCHEDULE_MODE: LR schedule — ``step``, ``cosine``, or ``constant``.
+        ITER_N_MIN: Minimum CA rollout steps per batch.
+        ITER_N_MAX: Maximum CA rollout steps per batch (sampled uniformly).
+        GRADIENT_CLIPPING_NORM: Max gradient norm; set to ``0`` to disable.
+        MIXED_PRECISION: Enable automatic mixed precision (AMP).
+        LPIPS_NET: Backbone for LPIPS loss — ``alex``, ``vgg``, or ``squeeze``.
+        VGG_PROJ_N: Number of random projections in the VGG style loss.
+    """
     BATCH_SIZE: int = 12
     STEPS: int = 10000
     LOSS_FN: str = "mse"
@@ -221,6 +277,32 @@ class SamplePoolConfig(BaseModel):
 
 
 class LatentConfig(BaseModel):
+    """Configuration for latent-space NCA training.
+
+    When ``ENABLED=True`` the CA operates in the compressed latent space of a
+    pre-trained encoder rather than directly on pixels, enabling high-resolution
+    generation at a fraction of the compute cost.
+
+    Attributes:
+        ENABLED: Activate latent-space mode.
+        ENCODER_TYPE: Encoder architecture — ``AE``, ``VAE``, or ``VQVAE``.
+            Valid values are the keys of ``LATENT_ENCODER_REGISTRY``.
+        LATENT_AE_IN_CHANNEL: Input channels to the encoder (e.g. 4 for RGBA).
+        LATENT_AE_OUT_CHANNEL: Output channels from the decoder.
+        LATENT_AE_CHANNEL: Latent bottleneck channels (CA state size in latent mode).
+        LATENT_AE_COMPRESSION: Spatial downsampling factor as 2^N.
+        AE_CHECKPOINT: Explicit path to a pre-trained encoder checkpoint;
+            if ``None`` the default path inside ``FOLDER_NAME`` is used.
+        VAE_KL_BETA: Weight of the KL divergence term in the VAE loss.
+        VAE_BASE_CHANNELS: Base feature channels in VAE encoder/decoder.
+        VAE_NUM_DOWNSAMPLES: Number of stride-2 downsampling stages.
+        VAE_NORM_GROUPS: Group normalisation groups in VAE conv layers.
+        VAE_RECON_LOSS_TYPE: Pixel reconstruction loss — ``l1`` or ``mse``.
+        VAE_RECON_LOSS_WEIGHT: Weight for the pixel reconstruction term.
+        VAE_VGG_LOSS_WEIGHT: Weight for the VGG perceptual loss term.
+        VQVAE_NUM_EMBEDDINGS: Codebook size for VQVAE.
+        VQVAE_COMMITMENT_COST: Commitment loss weight (β) for VQVAE.
+    """
     ENABLED: bool = False
     ENCODER_TYPE: str = "AE"
     LATENT_AE_STEPS: int = 10000
@@ -256,20 +338,49 @@ class LatentConfig(BaseModel):
 
 
 class AdversarialConfig(BaseModel):
-    ENABLED: bool = False  # Set to False to disable GAN training
-    D_IN_CHANNELS: int = 4  # Number of input channels for the discriminator
-    D_FEATURES: List[int] = [64, 128, 256, 512]  # Features for the discriminator
-    D_LEARNING_RATE: float = 0.001  # Learning rate for the discriminator
-    D_START_TRAINING: int = 0  # Steps at which the discriminator starts training
+    """Configuration for optional GAN (adversarial) training.
+
+    When ``ENABLED=True`` a patch discriminator is trained alongside the CA
+    generator using a WGAN-GP objective. The generator loss is a weighted sum
+    of the reconstruction loss, the adversarial loss, and an optional LPIPS
+    perceptual term. Generator and discriminator use separate optimisers and
+    separate ``GradScaler`` instances for mixed-precision training.
+
+    Attributes:
+        ENABLED: Activate adversarial training.
+        D_IN_CHANNELS: Input channels to the discriminator (must match the
+            generator output channels).
+        D_FEATURES: Channel progression in the discriminator
+            (e.g. ``[64, 128, 256, 512]``).
+        D_LEARNING_RATE: Discriminator learning rate.
+        D_START_TRAINING: Step at which discriminator training begins; allows
+            the generator to warm up before the critic is introduced.
+        D_WARMUP_STEPS: Linear LR warm-up steps for the discriminator.
+        D_GAMMA: LR decay factor for the discriminator scheduler.
+        D_N_CRITIC: Discriminator updates per generator update.
+        D_GP_WEIGHT: Gradient penalty coefficient λ in the WGAN-GP loss.
+        D_DOWNSCALE_FACTOR: Spatially downscale inputs to the discriminator
+            by this factor before the forward pass.
+        LPIPS_WEIGHT: Weight for the LPIPS perceptual term in the generator loss.
+        ADV_WEIGHT: Weight for the adversarial term in the generator loss.
+        RECON_WEIGHT: Weight for the reconstruction term in the generator loss.
+        SEED_TO_CRITIC: Pass the seed image as an additional channel to the
+            discriminator (conditional GAN setup).
+    """
+    ENABLED: bool = False
+    D_IN_CHANNELS: int = 4
+    D_FEATURES: List[int] = [64, 128, 256, 512]
+    D_LEARNING_RATE: float = 0.001
+    D_START_TRAINING: int = 0
     D_WARMUP_STEPS: int = 0
-    D_GAMMA: float = 0.1  # Learning rate decay factor for the discriminator
-    D_N_CRITIC: int = 1  # Number of critic updates per generator update
-    D_GP_WEIGHT: float = 10.0  # Weight for the gradient penalty in WGAN-GP
-    D_DOWNSCALE_FACTOR: int = 1  # Downscale factor for the discriminator input
-    LPIPS_WEIGHT: float = 0.0  # Weight for LPIPS loss in the generator's total loss
-    ADV_WEIGHT: float = 1.0  # Weight for adversarial loss in the generator's total loss
-    RECON_WEIGHT: float = 1.0  # Weight for reconstruction loss in the generator's total loss
-    SEED_TO_CRITIC: bool = False  # Whether to use seed information in the critic
+    D_GAMMA: float = 0.1
+    D_N_CRITIC: int = 1
+    D_GP_WEIGHT: float = 10.0
+    D_DOWNSCALE_FACTOR: int = 1
+    LPIPS_WEIGHT: float = 0.0
+    ADV_WEIGHT: float = 1.0
+    RECON_WEIGHT: float = 1.0
+    SEED_TO_CRITIC: bool = False
 
 class Config(BaseModel):
     PROJECT_NAME: str = "growing_ca"

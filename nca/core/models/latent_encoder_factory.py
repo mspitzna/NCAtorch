@@ -28,8 +28,25 @@ def _vae_criterion(cfg: Config, device: str):
 
 
 # Registry of all available latent encoder types.
-# Key -> factory function (config, device, inference_only) -> (model, criterion, kl_beta)
-# To add a new encoder: add an entry here. Tests and the config validator pick it up automatically.
+#
+# Maps an ENCODER_TYPE string to a factory lambda with signature:
+#   (config: Config, device: str, inference_only: bool)
+#       -> (model: nn.Module, criterion: nn.Module | None, kl_beta: float | None)
+#
+# Return values:
+#   model        — encoder/decoder moved to ``device``.
+#   criterion    — training loss for the autoencoder phase; ``None`` when
+#                  ``inference_only=True`` (avoids heavy downloads, e.g. VGG).
+#   kl_beta      — KL annealing weight for VAE; ``None`` for non-variational encoders.
+#
+# Adding a new encoder:
+#   1. Implement the class in nca/core/models/auto_encoder/.
+#   2. Add one entry here — the config validator and tests pick it up automatically.
+#
+# Available encoders:
+#   "AE"    — plain convolutional autoencoder
+#   "VAE"   — variational autoencoder with KL divergence + VGG perceptual loss
+#   "VQVAE" — vector-quantised VAE with straight-through estimator
 LATENT_ENCODER_REGISTRY = {
     "AE": lambda cfg, device, inference_only: (
         AutoEncoder(

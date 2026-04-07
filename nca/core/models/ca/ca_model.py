@@ -11,6 +11,29 @@ from .state_updates import (
 
 
 class CAModel(nn.Module, ABC):
+    """Core Neural Cellular Automata model.
+
+    Each forward pass applies one CA update step:
+      1. Perception  — neighbourhood operator maps state → gradient features.
+      2. Update model — 1×1 network maps gradient features → state delta (dx).
+      3. State update pipeline — applies dx through noise injection, stochastic
+         fire-rate masking, living mask, and optional output clamping.
+
+    The perception and update model are supplied at construction time via the
+    factory functions in ``perception_factory`` and ``update_model_factory``,
+    keeping this class architecture-agnostic.
+
+    Args:
+        device: Torch device string (``"cpu"``, ``"cuda"``, …).
+        use_positional_embeddings: If ``True``, learnable (x, y) coordinate
+            channels are appended to the input before perception.
+        img_height: Spatial height used to initialise positional embeddings.
+        img_width: Spatial width used to initialise positional embeddings.
+        perception_module: Instantiated perception module.
+        update_model_module: Instantiated update model.
+        state_update_pipeline: ``StateUpdatePipeline`` instance; defaults to
+            a plain ``ApplyDelta`` if omitted.
+    """
     def __init__(
         self,
         device="cpu",
@@ -115,6 +138,24 @@ class CAModel(nn.Module, ABC):
         return x
 
     def forward(self, x, cond=None, step_size=1.0, freeze_channels=None, return_residuals=False):
+        """Apply one CA update step.
+
+        Args:
+            x: State tensor ``[B, C, H, W]``.
+            cond: Optional condition — vector ``[B, cond_dim]`` or image
+                ``[B, cond_dim, H, W]``. Spatially broadcast/interpolated and
+                concatenated to ``x`` before perception.
+            step_size: Scalar multiplier applied to ``dx`` before the state
+                update (analogous to a learning rate at inference time).
+            freeze_channels: If set to integer ``k``, channels ``0..k`` are
+                held fixed; only channels ``k+1..`` are updated.
+            return_residuals: If ``True``, returns ``(new_state, dx)`` instead
+                of just ``new_state``.
+
+        Returns:
+            Updated state tensor ``[B, C, H, W]``, or ``(state, dx)`` if
+            ``return_residuals=True``.
+        """
         original_state_full = x
         frozen_layers = None
         if freeze_channels is not None:

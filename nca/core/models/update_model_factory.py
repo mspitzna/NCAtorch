@@ -2,8 +2,17 @@ from nca.utils.config import Config
 from nca.core.models.ca.update_models import SimpleMLPUpdate, ResNetUpdate
 
 # Registry of all available update models.
-# Key -> factory function (in_channels, out_channels, config) -> UpdateModelBase
-# To add a new update model: add an entry here. Tests and the config validator pick it up automatically.
+#
+# Maps a MODEL.NAME string to a factory lambda with signature:
+#   (in_channels: int, out_channels: int, config: Config) -> UpdateModelBase
+#
+# Adding a new update model:
+#   1. Implement the class in nca/core/models/ca/update_models.py.
+#   2. Add one entry here — the config validator and tests pick it up automatically.
+#
+# Available models:
+#   "MLP"    — stack of 1×1 convolutions with configurable hidden channels
+#   "ResNet" — residual blocks with configurable depth
 UPDATE_MODEL_REGISTRY = {
     "MLP": lambda in_ch, out_ch, cfg: SimpleMLPUpdate(
         in_channels=in_ch,

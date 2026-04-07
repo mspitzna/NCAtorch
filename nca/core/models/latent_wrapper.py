@@ -6,7 +6,19 @@ from nca.utils.config import Config
 
 
 class LatentWrapper(nn.Module):
-    """Wrapper that adds encode/decode capabilities to any model"""
+    """Wraps a ``CAModel`` to operate in the latent space of a pre-trained encoder.
+
+    The encoder is loaded from ``<FOLDER_NAME>/ae_checkpoints/<type>.pt`` (or
+    the explicit ``LATENT_TRAINING.AE_CHECKPOINT`` path) and kept frozen during
+    CA training. The forward pass is:
+
+        pixel input → encode → CA update (latent) → decode → pixel output
+
+    Args:
+        base_model: A ``CAModel`` instance sized for the latent space.
+        config: Full ``Config`` object; ``LATENT_TRAINING`` and ``FOLDER_NAME``
+            fields are used to locate and load the encoder checkpoint.
+    """
     def __init__(self, base_model, config: Config):
         super().__init__()
         self.base_model = base_model
