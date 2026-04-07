@@ -39,7 +39,10 @@ class LatentWrapper(nn.Module):
         
     def encode(self, x):
         """Encode from pixel to latent space"""
-        return self.encoder_decoder.encode(x)[0]
+        result = self.encoder_decoder.encode(x)
+        # AE.encode() returns a plain tensor
+        # VAE.encode() returns (mu, logvar) — use mu for deterministic encoding
+        return result[0] if isinstance(result, tuple) else result
         
     def decode(self, z):
         """Decode from latent to pixel space"""
