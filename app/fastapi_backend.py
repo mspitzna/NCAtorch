@@ -573,6 +573,8 @@ async def dataset_page(request: Request, dataset_type: str):
     model_name = getattr(model_cfg, "NAME", "Unknown") if model_cfg else "Unknown"
 
     template_name = f"{dataset_type}.html"
+    if not os.path.exists(os.path.join("app/templates", template_name)):
+        template_name = "default.html"
     context = {
         "request": request,
         "title": f"Dataset Page for {dataset_type}",
