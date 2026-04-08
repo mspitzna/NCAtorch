@@ -1,64 +1,62 @@
-PROJECT_NAME: "emoji"                 # Name of the project
-TRAIN_NAME: "emoji_deletee"              # Name of the training run
-SEED: 42                                  # Random seed
-DEVICE: "cuda"                             # Device to use for training
-WANDB: false                               # Flag to enable logging to Weights & Biases
+PROJECT_NAME: "emoji"
+TRAIN_NAME: "emoji_3x3"
+SEED: 42
+DEVICE: "cuda"
+WANDB: false
 
 MODEL:
-  NAME: "MLP"
-  HIDDEN_CHANNELS: [64, 128]
-  CHANNEL_N: 16
-  USE_POSITIONAL_EMBEDDINGS: False
-  LIVING_MASK: true
-  CLAMP_OUTPUT: false
-  FINAL_ACTIVATION: false
+  NAME: "MLP"                         # Update model architecture: MLP or ResNet
+  HIDDEN_CHANNELS: [80]               # Hidden layer sizes in the update model
+  CHANNEL_N: 16                       # Number of CA state channels per cell
+  USE_POSITIONAL_EMBEDDINGS: False    # Append learnable (x, y) coordinate channels to state
+  LIVING_MASK: true                   # Zero out updates for cells below the alive threshold
+  CLAMP_OUTPUT: true                  # Clamp state values to [-1, 1] after each step
+  FINAL_ACTIVATION: true              # Apply Tanh to the update model output
   PERCEPTIONS:
-    - MODE: "conv"
+    - MODE: "conv"            # Neighbourhood operator: conv, attention, mh_attention, sobel
       KERNEL_SIZE: 3
-      OUT_CHANNEL: 72
-    - MODE: "conv"
-      KERNEL_SIZE: 3
-      OUT_CHANNEL: 72
-
+      OUT_CHANNEL: 80                 # Output channels from this perception branch
 
 TRAINING:
-  BATCH_SIZE: 18
+  BATCH_SIZE: 10
   STEPS: 100000
+  LOSS_FN: "mse"                      # Reconstruction loss: mse, l1, lpips, vggstyle, p_ce, i_ce, overflow
   LEARNING_RATE: 0.0005
-  LR_SCHEDULE_MODE: "cosine"
-  LOSS_FN: "mse"
-  WARMUP_STEPS: 10000
-  OVERFLOW_LOSS: true
-  GAMMA: 0.1
+  LR_SCHEDULE_MODE: "cosine"          # LR schedule: step, cosine, constant
+  OPTIMIZER_BETAS: [0.5, 0.95]
+  WARMUP_STEPS: 1000                  # Linear LR warm-up duration
+  OVERFLOW_LOSS: true                 # Add overflow penalty to the loss
+  OVERFLOW_WEIGHT: 1.0
   LOG_INTERVAL: 500
   SAVE_INTERVAL: 25000
-  ITER_N_MIN: 48
-  ITER_N_MAX: 64
-  MIXED_PRECISION: true
-  INTERMEDIATE_LOGGING_STEPS: [5, 20, 40]
-  GRADIENT_CLIPPING_NORM: 1.0
-  GRADIENT_CHECKPOINTING: false
+  ITER_N_MIN: 38                      # Minimum CA rollout steps per batch
+  ITER_N_MAX: 46                      # Maximum CA rollout steps per batch (sampled uniformly)
+  INTERMEDIATE_LOGGING_STEPS: [5, 20, 35]  # Steps at which intermediate states are logged (must be < ITER_N_MIN)
+  GRADIENT_CLIPPING_NORM: 1.0         # Max gradient norm; 0 to disable
+  GRADIENT_CHECKPOINTING: true        # Trade compute for memory via activation checkpointing
   GRADIENT_CHECKPOINT_SEGMENTS: 10
   GRADIENT_ACCUMULATION_STEPS: 1
+  MIXED_PRECISION: true               # Enable automatic mixed precision (AMP)
 
 DATASET:
-  NAME: "emoji"                            # Name of the dataset [emoji, e2h, mnist]
-  TARGET_SIZE: 40
-  TARGET_PADDING: 16
+  NAME: "emoji"                       # Dataset name: emoji, e2h, mnist, cifar10
+  TARGET_SIZE: 40                     # Spatial resolution of the target image
+  TARGET_PADDING: 18                  # Zero-padding added around the target
   NUM_WORKERS: 4
   EMOJIS:
-    - "😭"
-    - "🔥"
-    - "🎉"
-    - "🍀"
-    - "🍎"
+    - "😀"
+    - "🦎"
+    - "🕸"
+    - "🐠"
+    - "🦋"
+    - "🎄"
 
 PATTERN_POOL:
-  ENABLED: true
-  POOL_SIZE: 256
-  POOL_DELAY: 1
-  POOL_START_RATIO: 0.5
+  ENABLED: true                       # Use a persistent sample pool across steps
+  POOL_SIZE: 256                      # Number of states stored in the pool
+  POOL_DELAY: 1                       # Steps before pool sampling begins
+  POOL_START_RATIO: 0.5               # Fraction of each batch drawn from the pool
   POOL_END_RATIO: 0.5
-  POOL_DMG_RATIO: 0.5
-  POOL_DMG_DELAY: 1
-  POOL_MUTATION_RATIO: 0.5
+  POOL_DMG_RATIO: 0.5                 # Fraction of pool samples that are damaged before use
+  POOL_DMG_DELAY: 1                   # Steps before damage is applied
+  POOL_MUTATION_RATIO: 0.5            # Fraction of pool samples that are mutated

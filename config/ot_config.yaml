@@ -1,39 +1,38 @@
-PROJECT_NAME: "ot_ziggzagged"                 # Name of the project
-TRAIN_NAME: "ot_ziggzagged_3x3"              # Name of the training run
+PROJECT_NAME: "ot_spiralled"                 # Name of the project
+TRAIN_NAME: "ot_spiralled_3x3"              # Name of the training run
 SEED: 41                                  # Random seed
 DEVICE: "cuda"                             # Device to use for training
 WANDB: false                               # Flag to enable logging to Weights & Biases
 
 MODEL:
   NAME: "MLP"
-  HIDDEN_CHANNELS: [80]
-  CHANNEL_N: 16
+  HIDDEN_CHANNELS: [96]
+  CHANNEL_N: 3
   LIVING_MASK: false
   CLAMP_OUTPUT: true
   PERCEPTIONS:
     - MODE: "conv"
       KERNEL_SIZE: 3
-      OUT_CHANNEL: 80
-    - MODE: "deformable_conv"
-      KERNEL_SIZE: 3
-      OUT_CHANNEL: 80
+      OUT_CHANNEL: 96
 
 
 TRAINING:
   BATCH_SIZE: 12
-  STEPS: 50000
+  STEPS: 100000
   LEARNING_RATE: 0.0005
   LR_SCHEDULE_MODE: "cosine"
   LOSS_FN: "vggstyle"
-  WARMUP_STEPS: 10000
+  OPTIMIZER_BETAS: [0.5, 0.95]
+  GRADIENT_CLIPPING_NORM: 0.3
+  WARMUP_STEPS: 1000
   OVERFLOW_LOSS: true
   GAMMA: 0.1
-  LOG_INTERVAL: 500
-  SAVE_INTERVAL: 50000
-  ITER_N_MIN: 12
-  ITER_N_MAX: 22
-  MIXED_PRECISION: true
-  INTERMEDIATE_LOGGING_STEPS: [5, 10]
+  LOG_INTERVAL: 1000
+  SAVE_INTERVAL: 100000
+  ITER_N_MIN: 5
+  ITER_N_MAX: 6
+  MIXED_PRECISION: false
+  INTERMEDIATE_LOGGING_STEPS: [3]
   GRADIENT_CLIPPING_NORM: 1.0
   GRADIENT_CHECKPOINTING: false
   GRADIENT_CHECKPOINT_SEGMENTS: 10
@@ -41,8 +40,8 @@ TRAINING:
 
 DATASET:
   NAME: "ot"                           
-  DATASET_SAMPLE_PATH: "./datasets/dtd-r1.0.1/dtd/images/zigzagged/zigzagged_0031.jpg" # mandatory for 'ot' dataset
-  TARGET_SIZE: 98
+  DATASET_SAMPLE_PATH: "./datasets/dtd-r1.0.1/dtd/images/spiralled/spiralled_0042.jpg" # mandatory for 'ot' dataset
+  TARGET_SIZE: 128
 
 PATTERN_POOL:
   ENABLED: true
@@ -53,3 +52,25 @@ PATTERN_POOL:
   POOL_DMG_RATIO: 0.5
   POOL_DMG_DELAY: 1
   POOL_MUTATION_RATIO: 0.5
+
+LATENT_TRAINING:
+  ENABLED: True
+  LATENT_AE_STEPS: 10000
+  LATENT_AE_LR: 0.0005                  
+  LATENT_AE_WARMUP_STEPS: 2000          
+  LATENT_AE_IN_CHANNEL: 3
+  LATENT_AE_OUT_CHANNEL: 3
+  LATENT_AE_LOG_INTERVAL: 500
+  LATENT_AE_SAVE_INTERVAL: 50000
+  ENCODER_TYPE: "VQVAE"
+  VAE_BATCH_SIZE: 16
+  VAE_KL_BETA: 0.5                   
+  VAE_BASE_CHANNELS: 64
+  VAE_NUM_DOWNSAMPLES: 3
+  VAE_NORM_GROUPS: 32
+  VAE_KL_WARMUP_STEPS: 30000             
+  APPLY_DAMAGE: False
+  VAE_VGG_LOSS_WEIGHT: 1.0
+  VAE_L1_LOSS_WEIGHT: 1.0
+  VAE_RECON_LOSS_TYPE: "mse"
+

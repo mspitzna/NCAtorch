@@ -121,37 +121,49 @@ Models and training are configured via YAML files. Each perception entry declare
 ```yaml
 PROJECT_NAME: "your_project"        # High-level grouping for experiment tracking
 TRAIN_NAME: "your_training_0"       # Unique name for this training run
+SEED: 42                            # Random seed (-1 for random)
+DEVICE: "cuda"
 
 MODEL:
-  NAME: "MLP"                      # Select the MLP architecture for the update module
-  HIDDEN_CHANNELS: [64, 128]       # Hidden units per layer in the update module
-  CHANNEL_N: 16                    # Number of state channels per cell
+  NAME: "MLP"                       # Update model architecture: MLP or ResNet
+  HIDDEN_CHANNELS: [64, 128]        # Hidden layer sizes in the update model
+  CHANNEL_N: 16                     # Number of CA state channels - visible and classification channels are included here
+  LIVING_MASK: true                 # Zero out updates for cells below the alive threshold
+  LIVING_MASK_INDEX: 3              # Alpha channel as living mask  
+  CLAMP_OUTPUT: false               # Clamp state values to [-1, 1] after each step
   PERCEPTIONS:
-    - MODE: "conv"                 # Standard convolutional neighborhood perception
-      KERNEL_SIZE: 5
-      OUT_CHANNEL: 48              # Filters for this perception branch
-    - MODE: "residual_conv"        # Residual convolutional neighborhood perception
-      OUT_CHANNEL: 32              # Filters for this perception branch
+    - MODE: "conv"                  # Neighbourhood operator: conv, attention, mh_attention, sobel
+      KERNEL_SIZE: 3
+      OUT_CHANNEL: 48               # Output channels from this perception branch
+    - MODE: "attention"             # Multiple branches are concatenated before the update model
+      OUT_CHANNEL: 32
 
 TRAINING:
-  BATCH_SIZE: 18                   # Cell grids processed per optimization step
-  LEARNING_RATE: 0.0005            # learning rate (see config/training)
-  STEPS: 50000                     # Total optimization steps (in batches)
-  LOSS_FN: "mse"                   # Target reconstruction loss
-  ITER_N_MIN: 20                   # Minimum rollout iterations per batch
-  ITER_N_MAX: 26                   # Maximum rollout iterations per batch
-  INTERMEDIATE_LOGGING_STEPS: [5, 10, 15]  # Intermediate logging states for visualization
+  BATCH_SIZE: 18
+  STEPS: 50000
+  LOSS_FN: "mse"                    # Reconstruction loss: mse, l1, lpips, vggstyle
+  LEARNING_RATE: 0.0005
+  LR_SCHEDULE_MODE: "cosine"        # LR schedule: step, cosine, constant
+  WARMUP_STEPS: 2000                # Linear LR warm-up duration
+  ITER_N_MIN: 20                    # Minimum CA rollout steps per batch
+  ITER_N_MAX: 26                    # Maximum CA rollout steps per batch (sampled uniformly)
+  INTERMEDIATE_LOGGING_STEPS: [5, 10, 15]  # Must all be < ITER_N_MIN
 
 DATASET:
-  NAME: "emoji"                    # Use built-in emoji dataset
-  TARGET_SIZE: 64                  # Resolution for targets and predictions
-  TARGET_PADDING: 16               # Padding arround target emoji
+  NAME: "emoji"                     # Dataset: for example emoji, e2h, mnist, cifar10
+  TARGET_SIZE: 64                   # Spatial resolution of the target image
+  TARGET_PADDING: 16                # Zero-padding added around the target (depends on dataset used)
   EMOJIS:
     - "😭"
     - "🔥"
+
+PATTERN_POOL:
+  ENABLED: true                     # Use a persistent sample pool across steps
+  POOL_SIZE: 256
+  POOL_START_RATIO: 0.5             # Fraction of each batch drawn from the pool
 ```
 
-💡 **See [config] directory for complete examples of all supported tasks.**
+💡 **See the [config/](config/) directory for complete per-task examples.**
 
 ## 🎯 Supported Tasks
 
