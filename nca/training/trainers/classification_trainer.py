@@ -32,42 +32,6 @@ class ClassificationTrainer(BaseTrainer):
         loss_dict = self.loss_fn(classified_x, target)
         return prediction_image, final_state, loss_dict
 
-    #def add_img_logs(self, x0, x, target, cond=None):
-    #    if self.config.DATASET.NAME == "mnist":
-    #        # Store for visualization
-    #        self.logger.add_img_logs(
-    #            self.dataloader.get_dataset().generate_colored_image(
-    #                to_grayscale(x0), self.classify(x0)
-    #            ),
-    #            self.dataloader.get_dataset().generate_colored_image(
-    #                to_grayscale(x), self.classify(x)
-    #            ),
-    #            self.dataloader.get_dataset().generate_colored_image(
-    #                to_grayscale(x0), target  # Use current seed image with target labels
-    #            ),
-    #        )
-    #        for key, val in self.logger.get_state_logs().items():
-    #            val = val.to(self.device)
-    #            self.logger.add_state_log(key, self.dataloader.get_dataset().generate_colored_image(
-    #                to_grayscale(val), self.classify(val)
-    #            ))
-    #    else:
-#
-    #        self.logger.add_img_logs(
-    #            self.dataloader.get_dataset().apply_per_pixel_coloring(
-    #                to_rgba(x0), target
-    #            ),
-    #            self.dataloader.get_dataset().apply_per_pixel_coloring(
-    #                to_rgba(x), self.classify(x)
-    #            ),
-    #            to_rgb(x0[:, :3]),
-    #        )
-    #        for key, val in self.logger.get_state_logs().items():
-    #            val = val.to(self.device)
-    #            self.logger.add_state_log(key, self.dataloader.get_dataset().apply_per_pixel_coloring(
-    #                to_rgba(val), self.classify(val)
-    #            ))
-
     def classify(self, x):
         """Classify the input x."""
         return x[:, -self.num_classes :]
