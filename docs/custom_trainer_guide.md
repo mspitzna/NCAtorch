@@ -11,7 +11,7 @@ A trainer owns the training loop for one experiment. It receives the CA model, d
 
 There are only two steps: implement the trainer and add one entry to the registry. The config validator updates itself automatically.
 
-## Step 1 – Understand `BaseTrainer`
+## Understand `BaseTrainer`
 
 All trainers inherit from [`BaseTrainer`](../nca/training/trainers/base_trainer.py). It handles everything that is shared across training setups:
 
