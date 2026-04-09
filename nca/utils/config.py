@@ -160,6 +160,9 @@ class TrainingConfig(BaseModel):
     LPIPS_NET: str = "alex"
     VGG_PROJ_N: int = 32
     TRAINER_TYPE: Optional[str] = None
+    # WSD schedule — stable phase fills the gap between warmup and decay
+    WSD_DECAY_RATIO: float = 0.1
+    WSD_MIN_LR_RATIO: float = 0.0
 
     @field_validator("TRAINER_TYPE")
     @classmethod
@@ -184,8 +187,8 @@ class TrainingConfig(BaseModel):
     @field_validator("LR_SCHEDULE_MODE")
     @classmethod
     def check_lr_schedule_mode(cls, value):
-        if value not in ["step", "cosine", "constant"]:
-            raise ValueError('LR_SCHEDULE_MODE  must be "step", "cosine" or "constant".')
+        if value not in ["step", "cosine", "constant", "wsd"]:
+            raise ValueError('LR_SCHEDULE_MODE must be "step", "cosine", "constant", or "wsd".')
         return value
 
     @field_validator("BATCH_SIZE")

@@ -3,18 +3,13 @@ import os
 import torch
 import numpy as np
 import torch.optim as optim
-from torch.optim import lr_scheduler
 import functools
 from abc import ABC, abstractmethod
 from tqdm import tqdm
 from nca.utils.config import Config
 from nca.utils.visualization import save_image
 from nca.training.sample_pool import SamplePool, TimeseriesSamplePool
-from nca.training.training_utils import (
-    create_warmup_constant_scheduler,
-    create_warmup_cosine_scheduler,
-    export_model,
-)
+from nca.training.training_utils import create_scheduler, export_model
 from nca.training.logger import Logger
 from nca.core.models.latent_wrapper import LatentWrapper
 
@@ -187,47 +182,11 @@ class BaseTrainer(ABC):
         """Initialize models, optimizers, and schedulers."""
         self.optimizer = optim.Adam(
             self.ca_model.parameters(),
-            lr=self.config.TRAINING.LEARNING_RATE,  # Base LR (peak LR after warmup)
-            betas=self.config.TRAINING.OPTIMIZER_BETAS,  # Use config for betas
+            lr=self.config.TRAINING.LEARNING_RATE,
+            betas=self.config.TRAINING.OPTIMIZER_BETAS,
         )
-
-        # Scheduler switch
-        if self.config.TRAINING.LR_SCHEDULE_MODE == "step":
-            # MultiStepLR typically steps per epoch. Warmup + cosine decay is harder here.
-            print(
-                "Warning: Warmup + cosine decay not implemented for 'step' mode. Using MultiStepLR."
-            )
-            self.lr_scheduler = lr_scheduler.MultiStepLR(
-                self.optimizer,
-                milestones=self.config.TRAINING.MILESTONES,  # Assumed to be in epochs
-                gamma=self.config.TRAINING.LR_GAMMA,
-            )
-        elif self.config.TRAINING.LR_SCHEDULE_MODE == "cosine":
-            # Use LambdaLR with a custom function for warmup + cosine decay
-            warmup_steps = self.config.TRAINING.WARMUP_STEPS
-            total_steps = self.config.TRAINING.STEPS
-
-            print(
-                f"Using LambdaLR scheduler with linear warmup for {warmup_steps} steps "
-                f"followed by cosine decay over remaining {total_steps - warmup_steps} steps."
-            )
-
-            self.lr_scheduler = create_warmup_cosine_scheduler(
-                self.optimizer, warmup_steps=warmup_steps, total_steps=total_steps
-            )
-        elif self.config.TRAINING.LR_SCHEDULE_MODE == "constant":
-            warmup_steps = self.config.TRAINING.WARMUP_STEPS
-
-            print(
-                f"Using LambdaLR scheduler with linear warmup for {warmup_steps} steps "
-                "followed by constant learning rate."
-            )
-
-            self.lr_scheduler = create_warmup_constant_scheduler(
-                self.optimizer, warmup_steps=warmup_steps
-            )
-        else:
-            raise ValueError("Invalid LR_SCHEDULE_MODE. Must be 'step', 'cosine', or 'constant'.")
+        self.lr_scheduler = create_scheduler(self.optimizer, self.config)
+        print(f"Using LR schedule: {self.config.TRAINING.LR_SCHEDULE_MODE}")
 
     def _evolve(self, state_in, conds, iter_n, freeze_channels=None, logging=False):
         """Evolves the CA model on the given state (image x or latent z)."""
