@@ -31,22 +31,26 @@ class MyCustomDataset(Dataset):
 
 ## Step 2 – Register it in the factory ([nca/data/dataset_factory.py](../nca/data/dataset_factory.py))
 
-Import your class and add a branch in `create_dataset()`:
+Import your class and add a factory function, then register it in `DATASET_REGISTRY`:
 
 ```python
 from nca.data.datasets.my_custom_dataset import MyCustomDataset
 
-# inside create_dataset():
-elif config.DATASET.NAME == "my_custom":
+def _create_my_custom(config: Config, train: bool):
     dataset = MyCustomDataset(
         root_dir=config.DATASET.DATAROOT,
         img_size=config.DATASET.TARGET_SIZE,
     )
-    cond_dim = 0
-    im_height = im_width = config.DATASET.TARGET_SIZE
+    size = config.DATASET.TARGET_SIZE
+    return dataset, 0, size, size  # (dataset, cond_dim, im_height, im_width)
+
+DATASET_REGISTRY = {
+    ...
+    "my_custom": _create_my_custom,
+}
 ```
 
-`create_dataset` returns `(dataloader, cond_dim, im_height, im_width)`. Make sure `cond_dim`, `im_height`, and `im_width` are set correctly for your data — they are used to size the CA model and condition embedding.
+Each factory function receives `(config, train)` and must return `(dataset, cond_dim, im_height, im_width)`. Make sure `cond_dim`, `im_height`, and `im_width` are set correctly for your data — they are used to size the CA model and condition embedding.
 
 ## Step 3 – Export from `__init__.py` ([nca/data/datasets/\_\_init\_\_.py](../nca/data/datasets/__init__.py))
 

@@ -106,7 +106,7 @@ class CaHandler:
                 x_tensor = self.ae.decode(x_latent)
                 return x_tensor, x_latent
             elif self.config.DATASET.NAME == "mnist":
-                x_tensor = self.ca_model(x_tensor, cond, freeze_channels=0)
+                x_tensor = self.ca_model(x_tensor, cond, freeze_channels=1)
             else:
                 x_tensor = self.ca_model(x_tensor, cond)
         return x_tensor, x_tensor
