@@ -18,7 +18,6 @@ from fastapi.staticfiles import StaticFiles
 # ========================
 # Local Module Imports
 # ========================
-from nca.utils.image_utils import to_rgb, to_rgba, to_grayscale
 from app.connection_manager import ConnectionManager
 from app.state_handler import StateHandler
 from app.ca_handler import CaHandler
@@ -103,38 +102,9 @@ def _to_cpu_detached(tensor: torch.Tensor) -> torch.Tensor:
 
 def convert_to_img(x_tensor: torch.Tensor, config, color_dim: int):
     """
-    Convert the CA tensor state to an RGB image based on the dataset configuration.
+    Convert the CA tensor state to an RGB image using the dataset's state_to_img method.
     """
-    if config.DATASET.NAME == "mnist":
-        dataset = ca_handler.get_dataset()
-        img = dataset.generate_colored_image(
-            to_grayscale(x_tensor), x_tensor[0, -10:]
-        )
-        img = to_rgb(img[:, :3].clone()).numpy().clip(0, 1).squeeze(0).transpose(1, 2, 0)
-        img = (img * 255).astype(np.uint8)
-    elif config.DATASET.NAME == "moving_mnist":
-        img = (
-            (
-                to_rgb(x_tensor[:, :1].clone())
-                .numpy()
-                .clip(0, 1)
-                .squeeze(0)
-                .transpose(1, 2, 0)
-            )
-            * 255
-        ).astype(np.uint8)
-    else:
-        img = (
-            (
-                to_rgb(x_tensor[:, :color_dim].clone())
-                .numpy()
-                .clip(0, 1)
-                .squeeze(0)
-                .transpose(1, 2, 0)
-            )
-            * 255
-        ).astype(np.uint8)
-    return img
+    return ca_handler.get_dataset().state_to_img(x_tensor, color_dim)
 
 
 async def reset_seed_and_condition():

@@ -1,7 +1,8 @@
+import numpy as np
 import torch
 from torchvision import transforms, datasets
 from nca.data.datasets.base_dataset import NCADataset
-from nca.utils.image_utils import to_grayscale
+from nca.utils.image_utils import to_grayscale, to_rgb
 
 
 class CustomMNISTDataset(NCADataset):
@@ -66,6 +67,15 @@ class CustomMNISTDataset(NCADataset):
         x_rgb = self.generate_colored_image(to_grayscale(x), x[:, -10:])
         target_rgb = self.generate_colored_image(to_grayscale(x0), target[:, -10:])
         return x0_rgb, x_rgb, target_rgb
+
+    def state_to_img(self, x_tensor: torch.Tensor, color_dim: int) -> np.ndarray:
+        img = self.generate_colored_image(
+            to_grayscale(x_tensor), x_tensor[0, -10:]
+        )
+        img = to_rgb(img[:, :3].clone())
+        return (
+            img.numpy().clip(0, 1).squeeze(0).transpose(1, 2, 0) * 255
+        ).astype(np.uint8)
 
     def generate_colored_image(self, image_tensor, per_pixel_label):
         """
