@@ -32,7 +32,7 @@ LOSS_FN_REGISTRY = {
     "mse":      lambda cfg: ReconstructionLoss(overflow_loss=cfg.TRAINING.OVERFLOW_LOSS, overflow_weight=cfg.TRAINING.OVERFLOW_WEIGHT),
     "l1":       lambda cfg: L1Loss(overflow_loss=cfg.TRAINING.OVERFLOW_LOSS, overflow_weight=cfg.TRAINING.OVERFLOW_WEIGHT, config=cfg),
     "lpips":    lambda cfg: LPIPSLoss(device=cfg.DEVICE, net=cfg.TRAINING.LPIPS_NET),
-    "vggstyle": lambda cfg: VGGStyleOTLoss(device=cfg.DEVICE, overflow_loss=cfg.TRAINING.OVERFLOW_LOSS, proj_n=cfg.TRAINING.VGG_PROJ_N),
+    "vgg": lambda cfg: VGGStyleOTLoss(device=cfg.DEVICE, overflow_loss=cfg.TRAINING.OVERFLOW_LOSS, proj_n=cfg.TRAINING.VGG_PROJ_N),
     "p_ce":     lambda cfg: PixelCrossEntropyLoss(),
     "i_ce":     lambda cfg: ImageCrossEntropyLoss(overflow_loss=cfg.TRAINING.OVERFLOW_LOSS, overflow_weight=cfg.TRAINING.OVERFLOW_WEIGHT),
     "overflow": lambda cfg: OverflowLoss(overflow_weight=cfg.TRAINING.OVERFLOW_WEIGHT),
