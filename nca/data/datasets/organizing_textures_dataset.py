@@ -67,3 +67,11 @@ class OrganizingTexturesDataset(NCADataset):
         target = Image.open(self.sample_path).convert("RGB")
         target = self.ot_transform(target)
         return target
+
+    def batch_to_rgb(self, x0, x, target, cond=None):
+        """Convert normalized OT tensors from [-1, 1] to display RGB [0, 1]."""
+        def visible_rgb(tensor):
+            rgb = tensor[:, :3]
+            return ((rgb + 1.0) * 0.5).clamp(0.0, 1.0)
+
+        return visible_rgb(x0), visible_rgb(x), visible_rgb(target)
