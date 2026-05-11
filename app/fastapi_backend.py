@@ -137,36 +137,29 @@ async def apply_ca_changes():
             await asyncio.sleep(sleep_time)
 
         with state_handler.get_lock():
-            x_tensor = state_handler.get_img_tensor().clone().detach()
+            x_tensor = state_handler.get_img_tensor().clone().detach()  # GPU clone
             cond_tensor = state_handler.get_condition_tensor()
             cond_tensor = cond_tensor.clone().detach() if cond_tensor is not None else None
             config = state_handler.get_config()
             color_dim = state_handler.get_color_dim()
 
-        # Adaptive broadcast interval based on image size and speed
+        # Adaptive broadcast interval based on image size
         img_size = x_tensor.shape[-1] * x_tensor.shape[-2]
-        speed = state_handler.get_speed()
-
-        # Aggressive frame skipping to compensate for slow encoding
-        # Skip more frames to maintain responsiveness
         if img_size > 512 * 512:
-            broadcast_interval = 4  # Every 4th frame for very large images
+            broadcast_interval = 4
         else:
-            broadcast_interval = 2  # Every 2nd frame for 512x512 to compensate for encoding time
+            broadcast_interval = 2
+
+        # Amortize AE encode/decode over multiple NCA steps for latent models
+        n_steps = 4 if config.LATENT_TRAINING.ENABLED else 1
 
         # Time the forward pass
         t0 = time.time()
         x_tensor_gpu, x_latent_gpu = await asyncio.to_thread(
-            ca_handler.forward, x_tensor, cond_tensor
+            ca_handler.forward, x_tensor, cond_tensor, n_steps
         )
-        # For latent training, store the latent for next iteration
-        # but keep the decoded tensor for display
-        if config.LATENT_TRAINING.ENABLED:
-            x_latent_cpu = await asyncio.to_thread(_to_cpu_detached, x_latent_gpu)
-            x_display_cpu = await asyncio.to_thread(_to_cpu_detached, x_tensor_gpu)
-        else:
-            x_display_cpu = await asyncio.to_thread(_to_cpu_detached, x_tensor_gpu)
-            x_latent_cpu = None
+        # Move display tensor to CPU only for image conversion
+        x_display_cpu = await asyncio.to_thread(_to_cpu_detached, x_tensor_gpu)
         t1 = time.time()
         timing_breakdown['forward'].append((t1 - t0) * 1000)
 
@@ -176,10 +169,11 @@ async def apply_ca_changes():
         timing_breakdown['convert'].append((t2 - t1) * 1000)
 
         with state_handler.get_lock():
+            # Keep next state on GPU: latent tensor for latent models, output tensor otherwise
             if config.LATENT_TRAINING.ENABLED:
-                state_handler.set_img_tensor(x_latent_cpu)
+                state_handler.set_img_tensor(x_latent_gpu)
             else:
-                state_handler.set_img_tensor(x_display_cpu)
+                state_handler.set_img_tensor(x_tensor_gpu)
 
             state_handler.set_img_canvas(img)
             img_for_broadcast = img.copy()
@@ -357,13 +351,14 @@ async def erase(action: dict):
     Erase part of the image using a brush tool.
     """
     with state_handler.get_lock():
+        device = state_handler.config.DEVICE
         img_canvas = state_handler.get_img_canvas()
-        img_tensor = state_handler.get_img_tensor().squeeze(0)
+        img_tensor = state_handler.get_img_tensor().cpu().squeeze(0)
         img_canvas, img_tensor = delete_brush(
             img_canvas, img_tensor, action, img_canvas.shape[0]
         )
         state_handler.set_img_canvas(img_canvas)
-        state_handler.set_img_tensor(img_tensor.unsqueeze(0))
+        state_handler.set_img_tensor(img_tensor.unsqueeze(0).to(device))
     return JSONResponse(content={"status": "Erased"})
 
 
@@ -476,13 +471,14 @@ async def paint(action: dict):
     Paint on the image using a brush tool (for MNIST dataset).
     """
     with state_handler.get_lock():
+        device = state_handler.config.DEVICE
         img_canvas = state_handler.get_img_canvas()
-        img_tensor = state_handler.get_img_tensor().squeeze(0)
+        img_tensor = state_handler.get_img_tensor().cpu().squeeze(0)
         img_canvas, img_tensor = paint_brush(
             img_canvas, img_tensor, action, img_canvas.shape[0]
         )
         state_handler.set_img_canvas(img_canvas)
-        state_handler.set_img_tensor(img_tensor.unsqueeze(0))
+        state_handler.set_img_tensor(img_tensor.unsqueeze(0).to(device))
     return JSONResponse(content={"status": "Painted"})
 
 

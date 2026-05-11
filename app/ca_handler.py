@@ -66,12 +66,10 @@ class CaHandler:
             if self.config.MODEL.LIVING_MASK is True
             else data[2].shape[1]
         )  # TODO Check this
-        # Return tensors on CPU for state storage (will be moved to device during forward pass)
-        x_tensor = sample.clone().detach().cpu()
-        current_input_image = (
-            sample[0, :3].squeeze(0).cpu().numpy().transpose(1, 2, 0) * 255
-        ).astype(np.uint8)
-        cond = cond.cpu() if cond is not None else None
+        device = self.config.DEVICE
+        x_tensor = sample.clone().detach().to(device)
+        current_input_image = self.get_dataset().state_to_img(sample.cpu(), COLOR_DIM)
+        cond = cond.to(device) if cond is not None else None
         return (
             IMG_SIZE,
             COLOR_DIM,
@@ -82,7 +80,7 @@ class CaHandler:
         )
 
     def get_condition_tensor(self, idx):
-        return self.dataloader.get_dataset().get_condition_tensor(idx).unsqueeze(0).cpu()
+        return self.dataloader.get_dataset().get_condition_tensor(idx).unsqueeze(0).to(self.config.DEVICE)
 
     def get_dataset(self):
         return self.dataloader.get_dataset()
@@ -90,7 +88,7 @@ class CaHandler:
     def get_dataset_name(self):
         return self.config.DATASET.NAME
 
-    def forward(self, x_tensor, cond):
+    def forward(self, x_tensor, cond, n_steps=1):
         with torch.no_grad():
             device = self.config.DEVICE
             x_tensor = x_tensor.to(device)
@@ -102,13 +100,16 @@ class CaHandler:
                     x_latent = enc[0] if isinstance(enc, tuple) else enc
                 else:
                     x_latent = x_tensor
-                x_latent = self.ca_model(x_latent, cond)
+                for _ in range(n_steps):
+                    x_latent = self.ca_model(x_latent, cond)
                 x_tensor = self.ae.decode(x_latent)
                 return x_tensor, x_latent
             elif self.config.DATASET.NAME == "mnist":
-                x_tensor = self.ca_model(x_tensor, cond, freeze_channels=1)
+                for _ in range(n_steps):
+                    x_tensor = self.ca_model(x_tensor, cond, freeze_channels=1)
             else:
-                x_tensor = self.ca_model(x_tensor, cond)
+                for _ in range(n_steps):
+                    x_tensor = self.ca_model(x_tensor, cond)
         return x_tensor, x_tensor
 
     def get_ui_config(self):

@@ -238,38 +238,12 @@
     latestImageBlob = null; // Clear the queue
 
     try {
-      // Read raw RGB data from blob
-      const arrayBuffer = await blobToRender.arrayBuffer();
-      const dataView = new DataView(arrayBuffer);
-
-      // Read dimensions from header (4 bytes each, little endian)
-      const width = dataView.getUint32(0, true);
-      const height = dataView.getUint32(4, true);
-
-      // Read RGB data
-      const rgbData = new Uint8ClampedArray(arrayBuffer, 8);
-
-      // Create ImageData and draw to canvas
-      const imageData = new ImageData(width, height);
-      for (let i = 0; i < width * height; i++) {
-        imageData.data[i * 4] = rgbData[i * 3];     // R
-        imageData.data[i * 4 + 1] = rgbData[i * 3 + 1]; // G
-        imageData.data[i * 4 + 2] = rgbData[i * 3 + 2]; // B
-        imageData.data[i * 4 + 3] = 255;              // A
-      }
-
+      const jpegBlob = new Blob([blobToRender], { type: "image/jpeg" });
+      const bitmap = await createImageBitmap(jpegBlob);
       requestAnimationFrame(() => {
-        // Create temporary canvas to draw ImageData, then scale to main canvas
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = width;
-        tempCanvas.height = height;
-        const tempCtx = tempCanvas.getContext('2d');
-        tempCtx.putImageData(imageData, 0, 0);
-
-        ctx.drawImage(tempCanvas, 0, 0, canvas.width, canvas.height);
+        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        bitmap.close();
         framesRendered++;
-
-        // Check if there's a newer frame waiting
         if (latestImageBlob) {
           renderNextFrame();
         } else {

@@ -9,9 +9,7 @@ class StateHandler:
     def __init__(self, config: Config, img_size, color_dim, cond_dim):
         self.config = config
         self.color_dim = color_dim
-        # Get device from config, default to CPU for state storage
-        # (tensors will be moved to model device during forward pass)
-        self.device = "cpu"  # Store state on CPU to save GPU memory
+        self.device = config.DEVICE
         self.img_canvas = np.zeros((img_size, img_size, 3), dtype=np.uint8)
         self.img_tensor = torch.zeros((1, color_dim, img_size, img_size), device=self.device)
         self.seed_tensor = torch.zeros((1, color_dim, img_size, img_size), device=self.device)

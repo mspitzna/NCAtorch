@@ -18,22 +18,13 @@ class ConnectionManager:
         for connection in self.active_connections:
             await connection.send_bytes(data)
 
-    async def broadcast_image(self, current_input_image: np.ndarray, max_size: int = 512):
-        """Broadcast image with optional downsampling for performance."""
-        # Downsample if image is larger than max_size
+    async def broadcast_image(self, current_input_image: np.ndarray, max_size: int = 512, quality: int = 85):
+        """Broadcast image as JPEG with optional downsampling."""
         h, w = current_input_image.shape[:2]
+        image_pil = Image.fromarray(current_input_image).convert("RGB")
         if h > max_size or w > max_size:
             scale = max_size / max(h, w)
-            new_h, new_w = int(h * scale), int(w * scale)
-            # Resize using numpy/cv2 would be faster, but PIL is simpler
-            image_pil = Image.fromarray(current_input_image).convert("RGB")
-            image_pil = image_pil.resize((new_w, new_h), Image.Resampling.NEAREST)
-            current_input_image = np.array(image_pil)
-
-        # Send raw RGB data with dimensions header
-        # Format: 4 bytes width + 4 bytes height + raw RGB data
-        h, w = current_input_image.shape[:2]
-        header = w.to_bytes(4, 'little') + h.to_bytes(4, 'little')
-        img_bytes = header + current_input_image.tobytes()
-
-        await self.broadcast_binary(img_bytes)
+            image_pil = image_pil.resize((int(w * scale), int(h * scale)), Image.Resampling.NEAREST)
+        buf = io.BytesIO()
+        image_pil.save(buf, format="JPEG", quality=quality)
+        await self.broadcast_binary(buf.getvalue())
