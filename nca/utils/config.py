@@ -135,6 +135,7 @@ class TrainingConfig(BaseModel):
         LPIPS_NET: Backbone for LPIPS loss — ``alex``, ``vgg``, or ``squeeze``.
         VGG_PROJ_N: Number of random projections in the VGG style loss.
         TRAINER_TYPE: Trainer to use.
+        EVOLVE_MODE: Rollout strategy key from ``EVOLVER_REGISTRY``.
     """
     BATCH_SIZE: int = 12
     STEPS: int = 10000
@@ -160,6 +161,7 @@ class TrainingConfig(BaseModel):
     LPIPS_NET: str = "alex"
     VGG_PROJ_N: int = 32
     TRAINER_TYPE: Optional[str] = None
+    EVOLVE_MODE: str = "base"
     # WSD schedule — stable phase fills the gap between warmup and decay
     WSD_DECAY_RATIO: float = 0.1
     WSD_MIN_LR_RATIO: float = 0.0
@@ -173,6 +175,16 @@ class TrainingConfig(BaseModel):
         if value not in TRAINER_REGISTRY:
             raise ValueError(
                 f"TRAINER_TYPE must be one of {sorted(TRAINER_REGISTRY)} or null for auto-selection."
+            )
+        return value
+
+    @field_validator("EVOLVE_MODE")
+    @classmethod
+    def check_evolve_mode(cls, value):
+        from nca.training.evolve_factory import EVOLVER_REGISTRY
+        if value not in EVOLVER_REGISTRY:
+            raise ValueError(
+                f"EVOLVE_MODE must be one of {sorted(EVOLVER_REGISTRY)}."
             )
         return value
 

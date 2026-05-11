@@ -3,7 +3,6 @@ import os
 import torch
 import numpy as np
 import torch.optim as optim
-import functools
 from abc import ABC, abstractmethod
 from tqdm import tqdm
 from nca.utils.config import Config
@@ -11,6 +10,7 @@ from nca.utils.visualization import save_image
 from nca.training.sample_pool import SamplePool, TimeseriesSamplePool
 from nca.training.training_utils import create_scheduler, export_model
 from nca.training.logger import Logger
+from nca.training.evolve_factory import create_evolver
 from nca.core.models.latent_wrapper import LatentWrapper
 
 
@@ -83,6 +83,7 @@ class BaseTrainer(ABC):
         self.intermediate_logging_steps = (
             self.config.TRAINING.INTERMEDIATE_LOGGING_STEPS
         )
+        self.evolver = create_evolver(config)
 
         # Ensure CA model is initialized
         assert (
@@ -190,33 +191,15 @@ class BaseTrainer(ABC):
 
     def _evolve(self, state_in, conds, iter_n, freeze_channels=None, logging=False):
         """Evolves the CA model on the given state (image x or latent z)."""
-        state = state_in
-        with torch.set_grad_enabled(self.ca_model.training):
-            # Helper function (can stay the same)
-            def evolve_step(step, current_state):
-                new_state = self.ca_model(
-                    current_state, conds, freeze_channels=freeze_channels
-                )
-                # Log state (x or z)
-                if logging and (step in self.intermediate_logging_steps):
-                    # Note: Logger might need adjustment if it assumes images for state logs
-                    self.logger.add_state_log(step, new_state)
-                return new_state
-
-            # Loop or checkpointing (remains the same)
-            if not self.gradient_checkpointing:
-                for step in range(iter_n):
-                    state = evolve_step(step, state)
-            else:
-                layers = [functools.partial(evolve_step, i) for i in range(iter_n)]
-                state = torch.utils.checkpoint.checkpoint_sequential(
-                    layers,
-                    self.config.TRAINING.GRADIENT_CHECKPOINT_SEGMENTS,
-                    state,
-                    use_reentrant=False,
-                )
-
-        return state  # Returns final state (x or z)
+        return self.evolver(
+            ca_model=self.ca_model,
+            state_in=state_in,
+            conds=conds,
+            iter_n=iter_n,
+            logger=self.logger,
+            freeze_channels=freeze_channels,
+            logging=logging,
+        )
 
     def forward(self, initial_state, cond, target, logging=False, freeze_channels=None):
         # initial_state is either image x or latent z, prepared by train loop
