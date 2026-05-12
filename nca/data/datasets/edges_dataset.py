@@ -115,7 +115,6 @@ class EdgesDataset(NCADataset):
         channel_n=16,
         random_crop=False,
         random_flip=False,
-        invertible=False,
         device="cpu",
     ):
         """Initialize this dataset class.
@@ -141,7 +140,6 @@ class EdgesDataset(NCADataset):
         self.random_flip = random_flip
         self.train = train
         self.channel_n = channel_n
-        self.invertible = invertible
         self.device = device
 
     def __getitem__(self, index):
@@ -211,28 +209,6 @@ class EdgesDataset(NCADataset):
             extended_A = A
 
         alpha_cond = A_alpha.clone()
-
-
-        # If invertible randomly swap A and B
-        if self.invertible:
-
-            # extend target B to match the channel size
-            if self.channel_n > 4:
-                extended_B = torch.cat(
-                    (
-                        B[:3],
-                        B_alpha,
-                        torch.randn_like(extended_A[4:, :, :]) * 0.05
-                    ),
-                    dim=0,
-                )
-            if random.random() > 0.65:
-                extended_A, extended_B = extended_B, extended_A
-                invertible_cond = torch.tensor([0.0, 1.0], device=self.device)  # Backward condition
-            else:
-                invertible_cond = torch.tensor([1.0, 0.0], device=self.device)  # Forward condition
-
-            return extended_A.to(self.device), invertible_cond.to(self.device), extended_B.to(self.device)
 
         return extended_A.to(self.device), alpha_cond.to(self.device), B.to(self.device)
 
