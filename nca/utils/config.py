@@ -249,7 +249,6 @@ class DatasetConfig(BaseModel):
     HISTORY_N: int = 1
     REVERSE_HISTORY_SEED: bool = False
     NUM_WORKERS: int = 0
-    INVERTIBLE: bool = False
     SEED_SIZE: int = 1  # Size of the cross pattern for GrowingMNISTDataset
     ENABLE_ROTATION: bool = False  # Enable rotation transformations in GrowingMNISTDataset
     ENABLE_ZOOM: bool = False  # Enable zoom transformations in GrowingMNISTDataset

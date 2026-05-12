@@ -28,7 +28,7 @@ from torch.utils.data import DataLoader
 #   "ot"            — organizing textures synthesis
 #   "mnist"         — self-classifying MNIST digits
 #   "cifar10"       — CIFAR-10 classification
-#   "growing_mnist" — invertible growing MNIST
+#   "growing_mnist" — growing MNIST
 #   "moving_mnist"  — temporal video prediction on Moving MNIST
 #   "celeba"        — CelebA face generation
 
@@ -60,9 +60,8 @@ def _create_e2h(config: Config, train: bool):
         img_size=config.DATASET.TARGET_SIZE,
         channel_n=config.MODEL.CHANNEL_N,
         device="cpu",
-        invertible=config.DATASET.INVERTIBLE,
     )
-    cond_dim = 2 if config.DATASET.INVERTIBLE else 0
+    cond_dim = 0
     size = config.DATASET.TARGET_SIZE
     return dataset, cond_dim, size, size
 
@@ -115,14 +114,13 @@ def _create_growing_mnist(config: Config, train: bool):
         train=train,
         target_padding=config.DATASET.TARGET_PADDING,
         device="cpu",
-        invertible=config.DATASET.INVERTIBLE,
         seed_size=config.DATASET.SEED_SIZE,
         goal_channels=config.CFG.GOAL_CHANNELS and config.CFG.ENABLED,
         enable_rotation=config.DATASET.ENABLE_ROTATION,
         enable_zoom=config.DATASET.ENABLE_ZOOM,
         latent_noise_channel=config.DATASET.Z_LATENT_NOISE_CHANNEL,
     )
-    cond_dim = 1 if config.DATASET.INVERTIBLE else 0
+    cond_dim = 0
     if config.CFG.ENABLED and config.CFG.GOAL_CHANNELS:
         cond_dim += 2
     size = int(28 + config.DATASET.TARGET_PADDING * 2)

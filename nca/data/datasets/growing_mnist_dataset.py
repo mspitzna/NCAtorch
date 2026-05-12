@@ -10,12 +10,11 @@ class GrowingMNISTDataset(NCADataset):
     Each sample provides a starting seed, a condition vector, and the target image.
     Includes methods for getting deterministic forward/backward samples.
     """
-    def __init__(self, root, channel_n=18, train=True, target_padding=4, device="cpu", invertible=False, seed_size=1, goal_channels=False, enable_rotation=False, enable_zoom=False, latent_noise_channel=False):
+    def __init__(self, root, channel_n=18, train=True, target_padding=4, device="cpu", seed_size=1, goal_channels=False, enable_rotation=False, enable_zoom=False, latent_noise_channel=False):
         self.root = root if root is not None else "datasets/mnist"
         self.channel_n = channel_n
         self.target_padding = target_padding
         self.device = device
-        self.invertible = invertible
         self.img_size = 28 + self.target_padding * 2
         self.seed_size = seed_size
         self.goal_channels = goal_channels
@@ -159,23 +158,8 @@ class GrowingMNISTDataset(NCADataset):
 
         digit_encoded_seed = self._create_seed(digit_label, rotation_angle, zoom_factor)
 
-        if self.invertible:
-            if direction == 'random':
-                is_forward_pass = random.random() < 0.5
-            else:
-                is_forward_pass = (direction == 'forward')
-
-            initial_state, direction_channel, final_state = self._convert_states(digit_encoded_seed, target, is_forward_pass)
-
-            if self.goal_channels:
-                condition_vector = torch.cat([direction_channel, self.blur_transform(final_state)], dim=0)
-            else:
-                condition_vector = direction_channel
-            return initial_state, condition_vector, final_state
-        else:
-            # Standard non-invertible training
-            condition_vector = self.blur_transform(target.clone()) if self.goal_channels else torch.tensor(0.0, device=self.device)
-            return digit_encoded_seed, condition_vector, target
+        condition_vector = self.blur_transform(target.clone()) if self.goal_channels else torch.tensor(0.0, device=self.device)
+        return digit_encoded_seed, condition_vector, target
 
     def _convert_states(self, initial_state: torch.Tensor, final_state: torch.Tensor, is_forward_pass: bool) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         if is_forward_pass:
@@ -196,7 +180,7 @@ class GrowingMNISTDataset(NCADataset):
 
     def __getitem__(self, idx):
         """
-        Gets a sample for training. If invertible, direction is random.
+        Gets a sample for training.
         """
         mnist_idx = self.active_indices[idx] # TODO
         return self._create_sample(mnist_idx, direction='random' if self.latent_noise_channel is False else 'forward')
