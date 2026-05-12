@@ -49,7 +49,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 2. Clone the repository:
 ```bash
-git clone <repo-url>
+git clone https://github.com/mspitzna/NCAtorch.git
 cd NCAtorch
 ```
 
