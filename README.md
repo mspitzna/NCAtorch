@@ -3,13 +3,9 @@
   <p>
     <em>A comprehensive PyTorch-based framework for Neural Cellular Automata research and applications</em>
   </p>
-
-
-  <!-- <p>
-    📄 Paper (Coming Soon) &nbsp&nbsp | &nbsp&nbsp 📚 <a href="#-documentation">Documentation</a> &nbsp&nbsp | &nbsp&nbsp 🚀 <a href="#-quick-start">Quick Start</a> &nbsp&nbsp | &nbsp&nbsp 🎨 <a href="#-interactive-visualization">Demo</a>
-  </p> -->
-
-  ---
+ 
+  [![arXiv](https://img.shields.io/badge/arXiv-2604.24990-b31b1b.svg)](https://arxiv.org/abs/2604.24990)
+  [![Project Website](https://img.shields.io/badge/Website-Visit%20Here-006c66)](https://www.neural-cellular-automata.org/)
 </div>
 
 ## 🌟 Highlights
@@ -27,7 +23,7 @@ Key features:
 
 ## 📑 What's New
 
-- **[TBA, 2026]** 🎉 Initial release of NCA-torch framework
+- **[13-05-2026]** 🌀 Initial release of NCAtorch framework!
 
 ## Community Works
 
@@ -218,25 +214,13 @@ nca-torch/
 
 ## 📝 Citation
 
-If you find this work useful, please consider citing:
+When using this code or the NCAtorch framework in your project, consider citing our works as follows:
 
 ```bibtex
-@software{ncatorch2025,
-  title={TBA},
-  author={TBA},
-  year={TBA},
-  url={TBA}
+@article{ncatorch,
+  title={A New Kind of Network? Review and Reference Implementation of Neural Cellular Automata},
+  author={Martin Spitznagel and Janis Keuper},
+  journal={Transactions on Machine Learning Research (TMLR)},
+  year={2026}
 }
 ```
-
-## 👥 Authors
-
-TBA
-
-## 📄 License
-
-TBA
-
-## Contact Us
-
-TBA
