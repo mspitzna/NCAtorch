@@ -27,7 +27,7 @@ Key features:
 
 ## 📑 What's New
 
-- **[TBA, 2025]** 🎉 Initial release of NCA-torch framework
+- **[TBA, 2026]** 🎉 Initial release of NCA-torch framework
 
 ## Community Works
 
