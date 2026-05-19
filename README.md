@@ -3,7 +3,8 @@
   <p>
     <em>A comprehensive PyTorch-based framework for Neural Cellular Automata research and applications</em>
   </p>
- 
+
+  [![TMLR](https://img.shields.io/badge/TMLR-accepted-brightgreen.svg)](https://arxiv.org/abs/2604.24990)
   [![arXiv](https://img.shields.io/badge/arXiv-2604.24990-b31b1b.svg)](https://arxiv.org/abs/2604.24990)
   [![Project Website](https://img.shields.io/badge/Website-Visit%20Here-006c66)](https://www.neural-cellular-automata.org/)
 </div>
