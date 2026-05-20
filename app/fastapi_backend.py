@@ -100,11 +100,8 @@ def _to_cpu_detached(tensor: torch.Tensor) -> torch.Tensor:
     return tensor.detach().cpu()
 
 
-def convert_to_img(x_tensor: torch.Tensor, config, color_dim: int):
-    """
-    Convert the CA tensor state to an RGB image using the dataset's state_to_img method.
-    """
-    return ca_handler.get_dataset().state_to_img(x_tensor, color_dim)
+def convert_to_img(x_tensor: torch.Tensor) -> np.ndarray:
+    return ca_handler.get_dataset().state_to_img(x_tensor)
 
 
 async def reset_seed_and_condition():
@@ -164,7 +161,7 @@ async def apply_ca_changes():
         timing_breakdown['forward'].append((t1 - t0) * 1000)
 
         # Time the image conversion
-        img = await asyncio.to_thread(convert_to_img, x_display_cpu, config, color_dim)
+        img = await asyncio.to_thread(convert_to_img, x_display_cpu)
         t2 = time.time()
         timing_breakdown['convert'].append((t2 - t1) * 1000)
 

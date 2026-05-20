@@ -1,4 +1,3 @@
-import numpy as np
 import torch
 from torchvision import transforms
 from torchvision.datasets import MovingMNIST
@@ -89,11 +88,8 @@ class MovingMNISTDataset(NCADataset):
             ]
         )
 
-    def state_to_img(self, x_tensor: torch.Tensor, color_dim: int) -> np.ndarray:
-        img = to_rgb(x_tensor[:, :1].clone())
-        return (
-            img.numpy().clip(0, 1).squeeze(0).transpose(1, 2, 0) * 255
-        ).astype(np.uint8)
+    def _colorize(self, x, x0=None, target=None, cond=None):
+        return to_rgb(x[:, :1])
 
     def __len__(self):
         return len(self.index_map)

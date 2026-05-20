@@ -1,8 +1,7 @@
-import numpy as np
 import torch
 from torchvision import transforms, datasets
 from nca.data.datasets.base_dataset import NCADataset
-from nca.utils.image_utils import to_grayscale, to_rgb
+from nca.utils.image_utils import to_grayscale
 
 
 class CustomMNISTDataset(NCADataset):
@@ -58,24 +57,14 @@ class CustomMNISTDataset(NCADataset):
         per_pixel_label[digit_label, digit_mask] = 1.0
         return per_pixel_label
     
+    def _colorize(self, x, x0=None, target=None, cond=None):
+        return self.generate_colored_image(to_grayscale(x), x[:, -10:])
+
     def batch_to_rgb(self, x0, x, target, cond=None):
-        """
-        Convert a batch of raw NCA tensors to RGB for logging.
-        Returns (x0_rgb, x_rgb, target_rgb) — each (B, 3, H, W).
-        """
-        x0_rgb = self.generate_colored_image(to_grayscale(x0), x0[:, -10:])
-        x_rgb = self.generate_colored_image(to_grayscale(x), x[:, -10:])
+        x0_rgb, x_rgb, _ = super().batch_to_rgb(x0, x, target, cond)
+        # target display: x0's grayscale with target's class labels
         target_rgb = self.generate_colored_image(to_grayscale(x0), target[:, -10:])
         return x0_rgb, x_rgb, target_rgb
-
-    def state_to_img(self, x_tensor: torch.Tensor, color_dim: int) -> np.ndarray:
-        img = self.generate_colored_image(
-            to_grayscale(x_tensor), x_tensor[0, -10:]
-        )
-        img = to_rgb(img[:, :3].clone())
-        return (
-            img.numpy().clip(0, 1).squeeze(0).transpose(1, 2, 0) * 255
-        ).astype(np.uint8)
 
     def generate_colored_image(self, image_tensor, per_pixel_label):
         """

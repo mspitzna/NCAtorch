@@ -68,7 +68,7 @@ class CaHandler:
         )  # TODO Check this
         device = self.config.DEVICE
         x_tensor = sample.clone().detach().to(device)
-        current_input_image = self.get_dataset().state_to_img(sample.cpu(), COLOR_DIM)
+        current_input_image = self.get_dataset().state_to_img(sample.cpu())
         cond = cond.to(device) if cond is not None else None
         return (
             IMG_SIZE,

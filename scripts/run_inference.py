@@ -33,6 +33,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from nca.utils.config import load_config
 from nca.core.models.model_factory import create_model
+from nca.core.models.latent_encoder_factory import create_latent_encoder, get_checkpoint_filename
 from nca.data.dataset_factory import create_dataset
 from nca.data.datasets.base_dataset import NCADataset
 
@@ -217,6 +218,19 @@ def main():
     model.to(device)
     model.eval()
 
+    # --- Latent autoencoder ---
+    ae = None
+    if config.LATENT_TRAINING.ENABLED:
+        ae, _, _ = create_latent_encoder(config, device, inference_only=True)
+        ae_ckpt = os.path.join(
+            log_dir, "ae_checkpoints",
+            get_checkpoint_filename(config.LATENT_TRAINING.ENCODER_TYPE),
+        )
+        ae.load_state_dict(torch.load(ae_ckpt, map_location=device, weights_only=True))
+        ae.to(device)
+        ae.eval()
+        print(f"AE         : {ae_ckpt}")
+
     # --- Pre-color fixed tensors (seed and target never change) ---
     has_coloring = isinstance(dataset, NCADataset)
     if has_coloring:
@@ -255,8 +269,13 @@ def main():
     state = seed.clone()
 
     with torch.no_grad():
-        # Frame 0 = initial seed
-        _, x_rgb, _ = colorize_state(x0_cpu)
+        if ae is not None:
+            enc = ae.encode(state)
+            state = enc[0] if isinstance(enc, tuple) else enc  # use mu for VAE
+
+        # Frame 0 = initial seed (decoded if latent)
+        vis = ae.decode(state).detach().cpu() if ae is not None else x0_cpu
+        _, x_rgb, _ = colorize_state(vis)
         video_frames.append(_make_frame(
             [("Seed", x0_rgb), ("Step 0", x_rgb), ("Target", target_rgb)],
             batch_size=args.batch_size,
@@ -264,7 +283,8 @@ def main():
 
         for step in range(1, iter_n + 1):
             state = model(state, cond, freeze_channels=freeze_channels)
-            _, x_rgb, _ = colorize_state(state.detach().cpu())
+            vis = ae.decode(state).detach().cpu() if ae is not None else state.detach().cpu()
+            _, x_rgb, _ = colorize_state(vis)
             video_frames.append(_make_frame(
                 [("Seed", x0_rgb), (f"Step {step}", x_rgb), ("Target", target_rgb)],
                 batch_size=args.batch_size,

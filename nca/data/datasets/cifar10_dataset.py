@@ -58,14 +58,13 @@ class CIFAR10Dataset(NCADataset):
         # Return input, dummy condition, and target mask.
         return seed_tensor, torch.tensor(0), target_mask
     
+    def _colorize(self, x, x0=None, target=None, cond=None):
+        return self.apply_per_pixel_coloring(to_rgba(x), x[:, -10:])
+
     def batch_to_rgb(self, x0, x, target, cond=None):
-        """
-        Convert a batch of raw NCA tensors to RGB for logging.
-        Returns (x0_rgb, x_rgb, target_rgb) — each (B, 3, H, W).
-        """
+        _, x_rgb, _ = super().batch_to_rgb(x0, x, target, cond)
         x0_rgb = self.apply_per_pixel_coloring(to_rgba(x0), target)
-        x_rgb = self.apply_per_pixel_coloring(to_rgba(x), x[:, -10:])
-        target_rgb = to_rgb(x0[:, :3])  # Just show the original image for the target, without coloring
+        target_rgb = to_rgb(x0[:, :3])
         return x0_rgb, x_rgb, target_rgb
 
     def apply_per_pixel_coloring(self, image_tensor, prediction_tensor):

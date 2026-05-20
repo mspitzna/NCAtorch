@@ -1,5 +1,4 @@
 from PIL import Image
-import numpy as np
 import torch
 from torchvision import transforms
 from nca.data.datasets.base_dataset import NCADataset
@@ -69,16 +68,8 @@ class OrganizingTexturesDataset(NCADataset):
         target = self.ot_transform(target)
         return target
 
-    def batch_to_rgb(self, x0, x, target, cond=None):
-        """Convert normalized OT tensors from [-1, 1] to display RGB [0, 1]."""
-        return self._visible_rgb(x0), self._visible_rgb(x), self._visible_rgb(target)
-
-    def state_to_img(self, x_tensor: torch.Tensor, color_dim: int) -> np.ndarray:
-        img = self._visible_rgb(x_tensor[:, :color_dim].clone())
-        return (
-            img.detach().cpu().numpy().clip(0, 1).squeeze(0).transpose(1, 2, 0) * 255
-        ).astype(np.uint8)
+    def _colorize(self, x, x0=None, target=None, cond=None):
+        return self._visible_rgb(x)
 
     def _visible_rgb(self, tensor):
-        rgb = tensor[:, :3]
-        return ((rgb + 1.0) * 0.5).clamp(0.0, 1.0)
+        return ((tensor[:, :3] + 1.0) * 0.5).clamp(0.0, 1.0)
