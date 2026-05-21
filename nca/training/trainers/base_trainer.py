@@ -189,7 +189,16 @@ class BaseTrainer(ABC):
         self.lr_scheduler = create_scheduler(self.optimizer, self.config)
         print(f"Using LR schedule: {self.config.TRAINING.LR_SCHEDULE_MODE}")
 
-    def _evolve(self, state_in, conds, iter_n, freeze_channels=None, logging=False):
+    def _evolve(
+        self,
+        state_in,
+        conds,
+        iter_n,
+        freeze_channels=None,
+        logging=False,
+        step_observers=None,
+        return_rollout=False,
+    ):
         """Evolves the CA model on the given state (image x or latent z)."""
         return self.evolver(
             ca_model=self.ca_model,
@@ -199,9 +208,20 @@ class BaseTrainer(ABC):
             logger=self.logger,
             freeze_channels=freeze_channels,
             logging=logging,
+            step_observers=step_observers,
+            return_rollout=return_rollout,
         )
 
-    def forward(self, initial_state, cond, target, logging=False, freeze_channels=None):
+    def forward(
+        self,
+        initial_state,
+        cond,
+        target,
+        logging=False,
+        freeze_channels=None,
+        step_observers=None,
+        return_rollout=False,
+    ):
         # initial_state is either image x or latent z, prepared by train loop
         iter_n = self.get_iter_range()
 
@@ -209,9 +229,18 @@ class BaseTrainer(ABC):
             # Input state0 is latent z
             z0 = initial_state
             # Evolve in latent space using the agnostic _evolve
-            z_final = self._evolve(
-                z0, cond, iter_n, logging=logging, freeze_channels=freeze_channels
+            evolve_result = self._evolve(
+                z0,
+                cond,
+                iter_n,
+                logging=logging,
+                freeze_channels=freeze_channels,
+                step_observers=step_observers,
+                return_rollout=return_rollout,
             )  # _evolve now just runs CA
+            z_final, rollout_output = (
+                evolve_result if return_rollout else (evolve_result, None)
+            )
             # Decode final latent state for loss calculation
             prediction_image = self.latent_wrapper.decode(z_final)
             final_state_for_commit = z_final  # Commit latent state
@@ -219,13 +248,24 @@ class BaseTrainer(ABC):
             # Input state0 is image x
             x0 = initial_state
             # Evolve in image space using the agnostic _evolve
-            x_final = self._evolve(
-                x0, cond, iter_n, logging=logging, freeze_channels=freeze_channels
+            evolve_result = self._evolve(
+                x0,
+                cond,
+                iter_n,
+                logging=logging,
+                freeze_channels=freeze_channels,
+                step_observers=step_observers,
+                return_rollout=return_rollout,
             )  # _evolve just runs CA
+            x_final, rollout_output = (
+                evolve_result if return_rollout else (evolve_result, None)
+            )
             # Prediction is the final image state
             prediction_image = x_final
             final_state_for_commit = x_final  # Commit image state
 
+        if return_rollout:
+            return prediction_image, final_state_for_commit, rollout_output
         return prediction_image, final_state_for_commit
 
     def train(self):
