@@ -56,7 +56,7 @@ def get_state_update_pipeline(config: Config, device) -> StateUpdatePipeline:
     if not config.LATENT_TRAINING.ENABLED and config.MODEL.LIVING_MASK:
         pipeline.append(LivingMask(alpha_channel=config.MODEL.LIVING_MASK_INDEX))
     if config.MODEL.CLAMP_OUTPUT:
-        pipeline.append(ClampOutput())
+        pipeline.append(ClampOutput(config.MODEL.CLAMP_OUTPUT_MIN, config.MODEL.CLAMP_OUTPUT_MAX))
 
     return StateUpdatePipeline(pipeline)
 

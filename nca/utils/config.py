@@ -80,6 +80,8 @@ class ModelConfig(BaseModel):
     NOISE_INJECTION: float = 0.0
     FINAL_ACTIVATION: bool = False
     CLAMP_OUTPUT: bool = False
+    CLAMP_OUTPUT_MIN: float = -1.0
+    CLAMP_OUTPUT_MAX: float = 1.0
     FIRE_RATE: float = 0.5
 
     RESNET_BLOCKS: int = 2
@@ -112,6 +114,15 @@ class ModelConfig(BaseModel):
     def set_channel_out(self):
         if self.CHANNEL_OUT is None:  # Not explicitly set, use CHANNEL_N
             self.CHANNEL_OUT = self.CHANNEL_N
+        return self
+
+    @model_validator(mode='after')
+    def check_living_mask_index(self):
+        if self.LIVING_MASK and not (0 <= self.LIVING_MASK_INDEX < self.CHANNEL_N):
+            raise ValueError(
+                f"LIVING_MASK_INDEX ({self.LIVING_MASK_INDEX}) must be in [0, CHANNEL_N) "
+                f"(0 to {self.CHANNEL_N - 1} inclusive)."
+            )
         return self
 
 
