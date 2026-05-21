@@ -84,9 +84,12 @@ DATASET:
 
 ## Step 6 – Customize visualization (optional)
 
-By default the pipeline visualizes the first 1–4 channels of the CA state and composites them over a white background using `to_rgb`. Override `_colorize` in your dataset class to change this — it is the single hook used by both the training logger and the web UI.
+By default the pipeline reads the first 1–4 channels of the CA state and converts them to RGB via `to_rgb`. Override `_colorize` in your dataset class to change this — it is the single hook consumed by both the training logger and the web UI.
+
+The example below assumes channels 0–2 carry RGB colour, channel 3 is an alive/alpha mask, and the optional `cond` tensor is a 3-element RGB tint. Adapt the channel indexing, compositing, and conditioning logic to match your own state and condition layout.
 
 ```python
+import torch
 from nca.data.datasets.base_dataset import NCADataset
 
 class MyCustomDataset(NCADataset):
@@ -100,27 +103,41 @@ class MyCustomDataset(NCADataset):
 
         Must return (1, 3, H, W) float32 in [0, 1].
         """
-        # Example: color pixels by their argmax class channel
-        return self.apply_coloring(x, x[:, -self.num_classes:])
+        # Channels 0-2: learned RGB colour; channel 3: alive/alpha mask.
+        rgb   = x[:, :3].clamp(0.0, 1.0)   # (1, 3, H, W)
+        alpha = x[:, 3:4].clamp(0.0, 1.0)  # (1, 1, H, W)
+
+        # Composite over a white background so dead cells appear white.
+        rgb = alpha * rgb + (1.0 - alpha)
+
+        # Tint the output with the condition colour when a condition is available.
+        if cond is not None:
+            # cond assumed to be a (1, 3) RGB tint in [0, 1]
+            tint = cond.view(1, 3, 1, 1)
+            rgb  = (rgb * tint).clamp(0.0, 1.0)
+
+        return rgb
 ```
 
-`_colorize` is called per sample. The base `batch_to_rgb` loops over the batch and stacks the results; `state_to_img` calls it once and converts to uint8 for the UI. You never need to override either of those methods unless `x0`, `x`, and `target` each need *different* coloring logic — for example, showing the seed colored by the ground-truth labels while `x` is colored by its own predicted labels:
+`_colorize` is called per sample. The base `batch_to_rgb` loops over the batch and stacks the results; `state_to_img` calls it once and converts to uint8 for the web UI. In most cases overriding `_colorize` is all you need.
+
+Override `batch_to_rgb` only when `x0`, `x`, and `target` require *different* coloring logic from each other — for example, fixing the target column to always show the ground-truth appearance rather than re-running `_colorize` on it:
 
 ```python
 def batch_to_rgb(self, x0, x, target, cond=None):
     x0_rgb, x_rgb, _ = super().batch_to_rgb(x0, x, target, cond)
-    # target column: x0's appearance with target's class labels
-    target_rgb = self.apply_coloring(x0, target[:, -self.num_classes:])
+    # Show the target as a plain RGB composite, independent of _colorize.
+    target_rgb = target[:, :3].clamp(0.0, 1.0)
     return x0_rgb, x_rgb, target_rgb
 ```
 
 ### Visualization contract
 
-| Method | Returns | dtype | Range | Shape |
-|---|---|---|---|---|
-| `_colorize` | `torch.Tensor` | float32 | `[0, 1]` | `(1, 3, H, W)` |
-| `batch_to_rgb` | tuple of 3 tensors | float32 | `[0, 1]` | `(B, 3, H, W)` each |
-| `state_to_img` | `np.ndarray` | uint8 | `[0, 255]` | `(H, W, 3)` |
+| Method | Input | Returns | dtype | Range | Shape |
+|---|---|---|---|---|---|
+| `_colorize` | single sample | `torch.Tensor` | float32 | `[0, 1]` | `(1, 3, H, W)` |
+| `batch_to_rgb` | full batch | tuple of 3 tensors | float32 | `[0, 1]` | `(B, 3, H, W)` each |
+| `state_to_img` | single sample | `np.ndarray` | uint8 | `[0, 255]` | `(H, W, 3)` |
 
 ---
 
