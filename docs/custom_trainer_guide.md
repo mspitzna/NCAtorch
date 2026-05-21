@@ -54,6 +54,68 @@ def _compute_losses(self, initial_state, cond, target, logging=False):
 
 `loss_dict` must contain a `"total_loss"` key. Any additional keys are logged automatically.
 
+### Optional rollout metadata and step observers
+
+Most trainers only need the final CA state, so the normal `forward()` call returns two values:
+
+```python
+prediction_image, final_state = self.forward(
+    initial_state, cond, target, logging=logging
+)
+```
+
+If a trainer needs information from every CA step, pass `return_rollout=True`. This returns a third value, `rollout`, without changing the default API for existing trainers:
+
+```python
+prediction_image, final_state, rollout = self.forward(
+    initial_state,
+    cond,
+    target,
+    logging=logging,
+    return_rollout=True,
+)
+```
+
+`rollout` is a `RolloutOutput` object. It contains the final state plus any losses, metrics, or states collected by optional step observers.
+
+A step observer is a callable that receives a `StepContext` once per rollout step. It can return `None`, or a `StepObserverOutput` with named losses and metrics:
+
+```python
+from nca.training.evolve import StepObserverOutput
+
+
+def smoothness_observer(ctx):
+    step_delta = ctx.next_state - ctx.previous_state
+    return StepObserverOutput(
+        losses={"step_smoothness": step_delta.square().mean()},
+        metrics={"mean_state": ctx.next_state.mean()},
+    )
+
+
+def _compute_losses(self, initial_state, cond, target, logging=False):
+    initial_state, cond, target = self._to_device(initial_state, cond, target)
+
+    prediction_image, final_state, rollout = self.forward(
+        initial_state,
+        cond,
+        target,
+        logging=logging,
+        return_rollout=True,
+        step_observers=[smoothness_observer],
+    )
+
+    loss_dict = self.loss_fn(prediction_image, target)
+    loss_dict["smoothness_loss"] = rollout.losses["step_smoothness"]
+    loss_dict["total_loss"] = (
+        loss_dict["total_loss"] + 0.1 * loss_dict["smoothness_loss"]
+    )
+    return prediction_image, final_state, loss_dict
+```
+
+Observer losses and metrics are aggregated across rollout steps by mean and exposed as `rollout.losses` and `rollout.metrics`. They are not logged automatically; add anything you want to track to your trainer's `loss_dict`.
+
+Step observers currently require `TRAINING.GRADIENT_CHECKPOINTING: false`. If observers are used with gradient checkpointing enabled, training raises a clear error.
+
 ### Optional hooks
 
 Override `_run_train_step` only if you need multi-optimizer logic (e.g. a GAN with a separate discriminator update). See [`AdversarialTrainer`](../nca/training/trainers/adversarial_trainer.py) for a reference.
