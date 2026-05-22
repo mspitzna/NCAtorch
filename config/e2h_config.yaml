@@ -5,7 +5,7 @@ DEVICE: "cuda"
 WANDB: true                               # Flag to enable logging to Weights & Biases
 
 MODEL:
-  MODEL_NAME: "ResNet"
+  NAME: "ResNet"
   HIDDEN_CHANNELS: [256]
   CHANNEL_N: 4
   USE_POSITIONAL_EMBEDDINGS: False
@@ -24,7 +24,7 @@ TRAINING:
   LEARNING_RATE: 0.0005
   LR_SCHEDULE_MODE: "cosine"
   OVERFLOW_LOSS: true
-  GAMMA: 0.1
+  LR_GAMMA: 0.1
   LOG_INTERVAL: 500
   SAVE_INTERVAL: 50000
   ITER_N_MIN: 20
@@ -83,7 +83,7 @@ LATENT_TRAINING:
   VAE_KL_WARMUP_STEPS: 30000             
   APPLY_DAMAGE: False
   VAE_VGG_LOSS_WEIGHT: 1.0
-  VAE_L1_LOSS_WEIGHT: 1.0
+  VAE_RECON_LOSS_WEIGHT: 1.0
   VAE_RECON_LOSS_TYPE: "mse"
 
 

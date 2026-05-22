@@ -1,9 +1,13 @@
 from pathlib import Path
 from typing import List, Optional
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
-class PerceptionConfig(BaseModel):
+class StrictModel(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+
+class PerceptionConfig(StrictModel):
     """Configuration for one perception branch.
 
     Multiple entries under ``MODEL.PERCEPTIONS`` run in parallel; their outputs
@@ -49,7 +53,7 @@ class PerceptionConfig(BaseModel):
         return value
 
 
-class ModelConfig(BaseModel):
+class ModelConfig(StrictModel):
     """Configuration for the CA model architecture.
 
     Attributes:
@@ -126,7 +130,7 @@ class ModelConfig(BaseModel):
         return self
 
 
-class TrainingConfig(BaseModel):
+class TrainingConfig(StrictModel):
     """Hyperparameters for the main CA training loop.
 
     Attributes:
@@ -249,7 +253,7 @@ class TrainingConfig(BaseModel):
         return value
 
 
-class DatasetConfig(BaseModel):
+class DatasetConfig(StrictModel):
     NAME: str = "emoji"
     DATAROOT: Path = None
     DATASET_SAMPLE_PATH: Path = None
@@ -279,7 +283,7 @@ class DatasetConfig(BaseModel):
             raise ValueError("TARGET_SIZE must be greater than zero.")
         return value
 
-class CFGConfig(BaseModel):
+class CFGConfig(StrictModel):
     ENABLED: bool = False
     DROPOUT_PROB: float = 0.1
     NULL_CONDITION_TYPE: str = "zeros"
@@ -288,7 +292,7 @@ class CFGConfig(BaseModel):
 
 
 
-class SamplePoolConfig(BaseModel):
+class SamplePoolConfig(StrictModel):
     ENABLED: bool = False
     TIMESERIES_POOL: bool = False
     POOL_SIZE: int = 1024
@@ -314,7 +318,7 @@ class SamplePoolConfig(BaseModel):
         return value
 
 
-class LatentConfig(BaseModel):
+class LatentConfig(StrictModel):
     """Configuration for latent-space NCA training.
 
     When ``ENABLED=True`` the CA operates in the compressed latent space of a
@@ -375,7 +379,7 @@ class LatentConfig(BaseModel):
         return value
 
 
-class AdversarialConfig(BaseModel):
+class AdversarialConfig(StrictModel):
     """Configuration for optional GAN (adversarial) training.
 
     When ``ENABLED=True`` a patch discriminator is trained alongside the CA
@@ -420,7 +424,7 @@ class AdversarialConfig(BaseModel):
     RECON_WEIGHT: float = 1.0
     SEED_TO_CRITIC: bool = False
 
-class Config(BaseModel):
+class Config(StrictModel):
     PROJECT_NAME: str = "growing_ca"
     FOLDER_NAME: str = None
     TRAIN_NAME: str = "TEST"

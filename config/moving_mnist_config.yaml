@@ -52,4 +52,3 @@ DATASET:
   DATAROOT: "datasets"
   HISTORY_N: 3
   TARGET_SIZE: 64
-  REVERSE_SEED: False
