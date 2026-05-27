@@ -59,6 +59,11 @@ cd NCAtorch
 uv sync --dev
 ```
 
+4. Activate environment:
+```bash
+source .venv/bin/activate
+```
+
 ### Training Your First Model
 
 Train an NCA model using a configuration file:
