@@ -1,3 +1,4 @@
+import torch
 from nca.utils.config import Config
 from .ca.state_updates import (
     ApplyDelta,
@@ -10,6 +11,19 @@ from .ca.state_updates import (
 from nca.core.models.perception_factory import create_perception_module
 from nca.core.models.update_model_factory import create_update_model
 from nca.core.models.ca.ca_model import CAModel
+
+
+def compile_model(model: torch.nn.Module, config: Config) -> torch.nn.Module:
+    """Optionally wrap *model* with ``torch.compile`` based on config."""
+    tc = config.TORCH_COMPILE
+    if not tc.ENABLED:
+        return model
+    if tc.DEBUG:
+        torch._inductor.config.debug = True
+    else:
+        torch._inductor.config.debug = False
+    print(f"[torch.compile] Compiling CA model (mode={tc.MODE!r}, debug={tc.DEBUG})")
+    return torch.compile(model, mode=tc.MODE)
 
 
 def create_model(config: Config, cond_dim, img_height, img_width):
@@ -40,7 +54,8 @@ def create_model(config: Config, cond_dim, img_height, img_width):
         update_model_module=update_model,
         state_update_pipeline=state_update_pipeline
     )
-    return ca.to(device)
+    ca = ca.to(device)
+    return compile_model(ca, config)
 
 
 def get_state_update_pipeline(config: Config, device) -> StateUpdatePipeline:

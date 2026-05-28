@@ -268,6 +268,7 @@ class DatasetConfig(StrictModel):
     ENABLE_ROTATION: bool = False  # Enable rotation transformations in GrowingMNISTDataset
     ENABLE_ZOOM: bool = False  # Enable zoom transformations in GrowingMNISTDataset
     Z_LATENT_NOISE_CHANNEL: bool = False  # Add latent noise channel as last dimension to target and seed
+
     
     @field_validator("DATASET_SAMPLE_PATH")
     @classmethod
@@ -379,6 +380,32 @@ class LatentConfig(StrictModel):
         return value
 
 
+class TorchCompileConfig(StrictModel):
+    """Configuration for ``torch.compile`` model compilation.
+
+    Attributes:
+        ENABLED: Compile the CA model with ``torch.compile``.
+        MODE: Compilation mode — ``default`` or
+            ``max-autotune-no-cudagraphs`` (slower compile, best kernel
+            selection).  Modes that use CUDA graphs (``reduce-overhead``,
+            ``max-autotune``) are excluded because CUDA graphs reuse GPU
+            memory buffers across replays, which corrupts the autograd
+            intermediates needed by the iterative NCA forward loop.
+        DEBUG: Enable ``torch._inductor`` debug output.
+    """
+    ENABLED: bool = False
+    MODE: str = "default"
+    DEBUG: bool = False
+
+    @field_validator("MODE")
+    @classmethod
+    def check_mode(cls, value):
+        allowed = {"default", "max-autotune-no-cudagraphs"}
+        if value not in allowed:
+            raise ValueError(f"TORCH_COMPILE.MODE must be one of {sorted(allowed)}.")
+        return value
+
+
 class AdversarialConfig(StrictModel):
     """Configuration for optional GAN (adversarial) training.
 
@@ -440,6 +467,7 @@ class Config(StrictModel):
     PATTERN_POOL: SamplePoolConfig = Field(default_factory=SamplePoolConfig)
     LATENT_TRAINING: LatentConfig = Field(default_factory=LatentConfig)
     ADVERSARIAL: AdversarialConfig = Field(default_factory=AdversarialConfig)
+    TORCH_COMPILE: TorchCompileConfig = Field(default_factory=TorchCompileConfig)
 
 
     COND_DIM: Optional[int] = None

@@ -32,7 +32,7 @@ from PIL import Image, ImageDraw, ImageFont
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from nca.utils.config import load_config
-from nca.core.models.model_factory import create_model
+from nca.core.models.model_factory import compile_model, create_model
 from nca.core.models.latent_encoder_factory import create_latent_encoder, get_checkpoint_filename
 from nca.data.dataset_factory import create_dataset
 from nca.data.datasets.base_dataset import NCADataset
@@ -212,8 +212,11 @@ def main():
         freeze_channels = None
 
     state_dict = torch.load(ckpt_path, map_location=device, weights_only=True)
-    if any(k.startswith("_orig_mod.") for k in state_dict):
-        state_dict = {k.removeprefix("_orig_mod."): v for k, v in state_dict.items()}
+    if any("_orig_mod." in k for k in state_dict):
+        state_dict = {
+            k.replace("._orig_mod.", ".").removeprefix("_orig_mod."): v
+            for k, v in state_dict.items()
+        }
     model.load_state_dict(state_dict)
     model.to(device)
     model.eval()
