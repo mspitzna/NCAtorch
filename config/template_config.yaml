@@ -179,3 +179,13 @@ ADVERSARIAL:
   ADV_WEIGHT: 1.0            # Adversarial term weight in generator loss
   RECON_WEIGHT: 1.0          # Reconstruction term weight in generator loss
   SEED_TO_CRITIC: false      # Pass seed image as extra channel to discriminator (conditional GAN)
+
+# -----------------------------------------------------------------------------
+# TORCH_COMPILE — torch.compile model compilation
+# -----------------------------------------------------------------------------
+TORCH_COMPILE:
+  ENABLED: false
+  MODE: "default"            # "default" | "max-autotune-no-cudagraphs"
+                             # CUDA-graph modes (reduce-overhead, max-autotune) are
+                             # incompatible with the iterative NCA forward loop.
+  DEBUG: false               # Enable torch._inductor debug output
