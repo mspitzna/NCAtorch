@@ -59,6 +59,11 @@ cd NCAtorch
 uv sync --dev
 ```
 
+4. Activate environment:
+```bash
+source .venv/bin/activate
+```
+
 ### Training Your First Model
 
 Train an NCA model using a configuration file:
@@ -74,6 +79,21 @@ ncatorch-train-ae --config config/your_config.yaml
 
 # Step 2 — train the CA, pointing --folder to the AE training log
 ncatorch-train --folder train_log/<run_folder>
+```
+
+#### Activate experiment tracking with [Weights & Biases](https://wandb.ai/site/)
+1. WandB console login (needs [Weights & Biases](https://wandb.ai/site/) account + API Key):
+```bash
+wandb login
+```
+2. Edit config .yaml 
+```bash
+WANDB: true
+```
+3. Train an NCA model using a configuration file:
+
+```bash
+ncatorch-train --config config/emoji_config.yaml
 ```
 
 💡 **Tip**: Start with the emoji generation task for quick results and visual feedback!
