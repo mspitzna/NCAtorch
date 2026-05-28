@@ -1,0 +1,181 @@
+# =============================================================================
+# NCAtorch — Template Configuration
+# All fields with their defaults and valid values.
+# Delete or comment out any section/field you don't need.
+# =============================================================================
+
+PROJECT_NAME: "growing_ca"   # W&B project / output folder name
+TRAIN_NAME: "TEST"           # Run name (sub-folder under PROJECT_NAME)
+FOLDER_NAME: null            # Override checkpoint folder; null = auto (PROJECT_NAME/TRAIN_NAME)
+SEED: -1                     # Random seed; -1 = no fixed seed
+DEVICE: "cuda"               # e.g. "cuda" | "cpu"
+WANDB: false                 # Enable Weights & Biases logging
+DEBUG: false                 # Verbose debug output
+
+# -----------------------------------------------------------------------------
+# MODEL — CA architecture
+# -----------------------------------------------------------------------------
+MODEL:
+  NAME: "MLP"                # Update model: "MLP" | "ResNet"
+  HIDDEN_CHANNELS: [64]      # Hidden layer widths, e.g. [128] or [128, 64]
+  CHANNEL_N: 16              # CA state channels per cell (must be > 0)
+  CHANNEL_OUT: null          # Output channels after update; null = same as CHANNEL_N
+
+  USE_POSITIONAL_EMBEDDINGS: false  # Append learnable (x, y) coord channels to state
+  LIVING_MASK: false                # Zero updates for cells below alive threshold
+  LIVING_MASK_INDEX: 3              # Channel index used to determine liveness (0 ≤ index < CHANNEL_N)
+  NOISE_INJECTION: 0.0              # Std of Gaussian noise added to dx each step (0.0–1.0)
+  FINAL_ACTIVATION: false           # Apply Tanh to update model output
+  CLAMP_OUTPUT: false               # Clamp state to [CLAMP_OUTPUT_MIN, CLAMP_OUTPUT_MAX] each step
+  CLAMP_OUTPUT_MIN: -1.0
+  CLAMP_OUTPUT_MAX:  1.0
+  FIRE_RATE: 0.5                    # Fraction of cells updated per step (stochastic update)
+
+  RESNET_BLOCKS: 2          # Residual blocks (ResNet only)
+
+  # Perception branches — outputs are concatenated before the update model.
+  # Add multiple entries for parallel branches.
+  PERCEPTIONS:
+    - MODE: "conv"           # "conv" | "sobel" | "attention" | "mh_attention" | "residual_conv"
+      KERNEL_SIZE: 3         # Spatial kernel size (conv-based modes)
+      DILATION: 1            # Dilation factor (conv mode)
+      OUT_CHANNEL: 80        # Output channels from this branch (must be > 0)
+      # attention / mh_attention only:
+      NUM_HEADS: 4
+      EMBED_DIM: 128
+      USE_REL_POS_BIAS: true
+      # mh_attention only:
+      USE_LAYER_NORM: true
+      INCLUDE_FFN: true
+
+# -----------------------------------------------------------------------------
+# TRAINING — optimiser and rollout hyperparameters
+# -----------------------------------------------------------------------------
+TRAINING:
+  BATCH_SIZE: 12             # Grids per optimisation step (must be > 0)
+  STEPS: 10000               # Total training steps
+
+  LOSS_FN: "mse"             # "mse" | "l1" | "lpips" | "vggstyle" | "p_ce" | "i_ce" | "overflow"
+  OVERFLOW_LOSS: false       # Add overflow penalty to the loss
+  OVERFLOW_WEIGHT: 1.0       # Weight for the overflow penalty term
+
+  LEARNING_RATE: 0.002       # Peak learning rate (0 < lr ≤ 1)
+  OPTIMIZER_BETAS: [0.9, 0.999]
+  WARMUP_STEPS: 2000         # Linear LR warm-up duration
+
+  LR_SCHEDULE_MODE: "step"   # "step" | "cosine" | "constant" | "wsd"
+  # "step" schedule:
+  MILESTONES: [2000, 8000]   # Steps at which LR is multiplied by LR_GAMMA
+  LR_GAMMA: 0.1              # Multiplicative LR decay factor
+  # "wsd" (warmup-stable-decay) schedule:
+  WSD_DECAY_RATIO: 0.1       # Fraction of total steps spent in cosine decay phase
+  WSD_MIN_LR_RATIO: 0.0      # Final LR as a fraction of peak LR
+
+  ITER_N_MIN: 32             # Minimum CA rollout steps per batch
+  ITER_N_MAX: 64             # Maximum CA rollout steps per batch (sampled uniformly)
+  INTERMEDIATE_LOGGING_STEPS: [5, 15, 25]  # Steps at which intermediate states are logged (all must be < ITER_N_MIN)
+
+  LOG_INTERVAL: 100          # Log metrics every N steps
+  SAVE_INTERVAL: 10000       # Save checkpoint every N steps
+
+  GRADIENT_CLIPPING_NORM: 1.0         # Max gradient norm; 0 = disabled
+  GRADIENT_CHECKPOINTING: false       # Trade compute for memory via activation checkpointing
+  GRADIENT_CHECKPOINT_SEGMENTS: 16   # Number of checkpointing segments (only when GRADIENT_CHECKPOINTING: true)
+  GRADIENT_ACCUMULATION_STEPS: 1     # Accumulate gradients over N steps before update
+
+  MIXED_PRECISION: false     # Enable automatic mixed precision (AMP)
+
+  LPIPS_NET: "alex"          # LPIPS backbone: "alex" | "vgg" | "squeeze"
+  VGG_PROJ_N: 32             # Random projections in the VGG style loss
+
+  TRAINER_TYPE: null         # Force a specific trainer; null = auto-select
+  EVOLVE_MODE: "base"        # Rollout strategy (see EVOLVER_REGISTRY)
+
+# -----------------------------------------------------------------------------
+# DATASET
+# -----------------------------------------------------------------------------
+DATASET:
+  NAME: "emoji"              # "emoji" | "ot" | "e2h" | "mnist" | "moving_mnist" | ...
+  TARGET_SIZE: 64            # Spatial resolution of the target image (must be > 0)
+  TARGET_PADDING: 0          # Zero-padding added around the target
+  NUM_WORKERS: 0             # DataLoader worker processes
+
+  # Required for NAME: "emoji"
+  EMOJIS: []                 # e.g. ["😀", "🦎"]
+
+  # Required for NAME: "e2h" | "celeba" | "mnist" | "moving_mnist"
+  DATAROOT: null             # Path to dataset root directory
+
+  # Required for NAME: "ot"
+  DATASET_SAMPLE_PATH: null  # Path to a single sample image
+
+  DROP_LAST_BATCH: true
+
+# -----------------------------------------------------------------------------
+# PATTERN_POOL — persistent sample pool for continual / damage training
+# -----------------------------------------------------------------------------
+PATTERN_POOL:
+  ENABLED: false
+  TIMESERIES_POOL: false     # Pool stores full timeseries (for sequence datasets)
+  POOL_SIZE: 1024            # Number of states stored in the pool
+  POOL_DELAY: 1000           # Steps before pool sampling begins
+  POOL_START_RATIO: 0.5      # Fraction of each batch drawn from the pool (0.0–1.0)
+  POOL_END_RATIO: 0.5        # Fraction returned to pool after each step (0.0–1.0)
+  POOL_DMG_RATIO: 0.0        # Fraction of pool samples damaged before use (0.0–1.0)
+  POOL_DMG_DELAY: null       # Steps before damage is applied; null = immediate
+  POOL_MUTATION_RATIO: 0.0   # Fraction of pool samples mutated (0.0–1.0)
+
+# -----------------------------------------------------------------------------
+# LATENT_TRAINING — train CA in the latent space of a pre-trained encoder
+# -----------------------------------------------------------------------------
+LATENT_TRAINING:
+  ENABLED: false
+  ENCODER_TYPE: "AE"         # "AE" | "VAE" | "VQVAE"
+
+  # Encoder training
+  LATENT_AE_STEPS: 10000
+  LATENT_AE_WARMUP_STEPS: 2000
+  LATENT_AE_LR: 0.001
+  LATENT_AE_LOG_INTERVAL: 2500
+  LATENT_AE_SAVE_INTERVAL: 5000
+  LATENT_AE_IN_CHANNEL: 4   # Encoder input channels (e.g. 4 for RGBA)
+  LATENT_AE_OUT_CHANNEL: 4  # Decoder output channels
+  LATENT_AE_CHANNEL: 64     # Latent bottleneck channels (= CA CHANNEL_N in latent mode)
+  LATENT_AE_COMPRESSION: 3  # Spatial downsampling as 2^N (must be ≥ 1)
+  APPLY_DAMAGE: false        # Apply damage augmentation during encoder training
+
+  AE_CHECKPOINT: null        # Path to a pre-trained encoder checkpoint; null = train from scratch
+
+  # VAE-specific
+  VAE_BATCH_SIZE: 18
+  VAE_KL_BETA: 1.0           # KL divergence weight
+  VAE_KL_WARMUP_STEPS: 0    # Steps to linearly ramp KL weight from 0 to VAE_KL_BETA
+  VAE_BASE_CHANNELS: 64      # Base feature channels in encoder/decoder
+  VAE_NUM_DOWNSAMPLES: 5     # Number of stride-2 downsampling stages
+  VAE_NORM_GROUPS: 32        # Groups in GroupNorm layers
+  VAE_RECON_LOSS_TYPE: "l1"  # Pixel reconstruction loss: "l1" | "mse"
+  VAE_RECON_LOSS_WEIGHT: 1.0
+  VAE_VGG_LOSS_WEIGHT: 1.0
+
+  # VQVAE-specific
+  VQVAE_NUM_EMBEDDINGS: 512  # Codebook size
+  VQVAE_COMMITMENT_COST: 0.25  # Commitment loss weight β
+
+# -----------------------------------------------------------------------------
+# ADVERSARIAL — optional GAN (WGAN-GP) training
+# -----------------------------------------------------------------------------
+ADVERSARIAL:
+  ENABLED: false
+  D_IN_CHANNELS: 4           # Discriminator input channels (must match generator output)
+  D_FEATURES: [64, 128, 256, 512]  # Channel progression in the discriminator
+  D_LEARNING_RATE: 0.001
+  D_WARMUP_STEPS: 0
+  D_START_TRAINING: 0        # Step at which discriminator training begins
+  D_GAMMA: 0.1               # LR decay factor for discriminator scheduler
+  D_N_CRITIC: 1              # Discriminator updates per generator update
+  D_GP_WEIGHT: 10.0          # Gradient penalty coefficient λ
+  D_DOWNSCALE_FACTOR: 1      # Spatially downscale inputs to discriminator by this factor
+  LPIPS_WEIGHT: 0.0          # LPIPS perceptual term weight in generator loss
+  ADV_WEIGHT: 1.0            # Adversarial term weight in generator loss
+  RECON_WEIGHT: 1.0          # Reconstruction term weight in generator loss
+  SEED_TO_CRITIC: false      # Pass seed image as extra channel to discriminator (conditional GAN)
