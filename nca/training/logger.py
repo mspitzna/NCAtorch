@@ -82,6 +82,15 @@ class Logger:
         if self.use_wandb:
             wandb.log({**agg_metrics, "Iteration": step}, step=step)
 
+    def wandb_log(self, data, step):
+        """Log an arbitrary payload to W&B if enabled; no-op otherwise.
+
+        Convenience entry point for ``LoggingObserver`` implementations so they
+        don't each re-check ``use_wandb`` or import wandb directly.
+        """
+        if self.use_wandb:
+            wandb.log(data, step=step)
+
     def peek_metrics(self):
         """
         Return the aggregated metrics without mutating internal buffers.

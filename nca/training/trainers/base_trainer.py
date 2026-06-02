@@ -1,5 +1,6 @@
 # trainers/trainer.py
 import os
+import warnings
 import torch
 import numpy as np
 import torch.optim as optim
@@ -11,6 +12,7 @@ from nca.training.sample_pool import SamplePool, TimeseriesSamplePool
 from nca.training.training_utils import create_scheduler, export_model
 from nca.training.logger import Logger
 from nca.training.evolve_factory import create_evolver
+from nca.training.observers import create_logging_observers
 from nca.core.models.latent_wrapper import LatentWrapper
 
 
@@ -84,6 +86,19 @@ class BaseTrainer(ABC):
             self.config.LOGGING.INTERMEDIATE_LOGGING_STEPS
         )
         self.evolver = create_evolver(config)
+
+        # Config-driven diagnostic logging observers (see nca.training.observers).
+        # They attach to the rollout only on logging steps. They are incompatible
+        # with gradient checkpointing (which hides individual rollout steps), so
+        # disable them with a warning rather than crashing mid-training.
+        self.logging_observers = create_logging_observers(config)
+        if self.logging_observers and self.gradient_checkpointing:
+            warnings.warn(
+                "Disabling LOGGING.OBSERVERS because "
+                "TRAINING.GRADIENT_CHECKPOINTING=true.",
+                stacklevel=2,
+            )
+            self.logging_observers = []
 
         # Ensure CA model is initialized
         assert (
@@ -225,6 +240,17 @@ class BaseTrainer(ABC):
         # initial_state is either image x or latent z, prepared by train loop
         iter_n = self.get_iter_range()
 
+        # On logging steps, attach the config-driven diagnostic observers to the
+        # rollout. They are reset here so each logging rollout starts clean, and
+        # merged with any caller-supplied observers. They log themselves later,
+        # during commit_logs (the logging phase).
+        active_observers = []
+        if logging and self.logging_observers:
+            for observer in self.logging_observers:
+                observer.reset()
+            active_observers = self.logging_observers
+        observers = list(step_observers or []) + active_observers
+
         if self.use_latent:
             # Input state0 is latent z
             z0 = initial_state
@@ -235,7 +261,7 @@ class BaseTrainer(ABC):
                 iter_n,
                 logging=logging,
                 freeze_channels=freeze_channels,
-                step_observers=step_observers,
+                step_observers=observers or None,
                 return_rollout=return_rollout,
             )  # _evolve now just runs CA
             z_final, rollout_output = (
@@ -254,7 +280,7 @@ class BaseTrainer(ABC):
                 iter_n,
                 logging=logging,
                 freeze_channels=freeze_channels,
-                step_observers=step_observers,
+                step_observers=observers or None,
                 return_rollout=return_rollout,
             )  # _evolve just runs CA
             x_final, rollout_output = (
@@ -369,7 +395,7 @@ class BaseTrainer(ABC):
 
                 # Logging and visualization
                 if (i + 1) % self.log_interval == 0:
-                    self.commit_logs(i, images=True, silent=self.logger.use_wandb)
+                    self.commit_logs(i, is_logging_step=True, silent=self.logger.use_wandb)
                 else:
                     self.commit_logs(i, silent=True)
 
@@ -515,24 +541,28 @@ class BaseTrainer(ABC):
             x0_vis, x_vis, target_vis = x0, x, target
         self.logger.add_img_logs(x0_vis, x_vis, target_vis)
 
-    def commit_logs(self, step, images=False, silent=False):
+    def commit_logs(self, step, is_logging_step=False, silent=False):
         metrics_snapshot = self.logger.peek_metrics()
         if metrics_snapshot:
             for key, value in metrics_snapshot.items():
                 self._interval_metric_buffer.setdefault(key, []).append(value)
-            if not images and not silent:
+            if not is_logging_step and not silent:
                 print(f"Step {step + 1}: {metrics_snapshot}", flush=True)
 
         # Always forward metrics to logger outputs (e.g., wandb) but suppress console prints here.
         self.logger.log_metrics(step + 1)
 
-        if images:
+        if is_logging_step:
             if self.use_latent:
                 for key, val in self.logger.get_state_logs().items():
                     # val is already on correct device, no need to move it
                     decoded_val = self.latent_wrapper.decode(val).detach().cpu()
                     self.logger.add_state_log(key, decoded_val)
             self.logger.log_images(step + 1)
+            # Logging phase: each diagnostic observer emits what it collected
+            # during this step's rollout (to W&B and/or console).
+            for observer in self.logging_observers:
+                observer.log(self.logger, step + 1)
             if not silent and self._interval_metric_buffer:
                 averaged_metrics = {
                     key: float(np.mean(values))

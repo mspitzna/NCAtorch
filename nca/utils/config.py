@@ -434,6 +434,33 @@ class AdversarialConfig(StrictModel):
     RECON_WEIGHT: float = 1.0
     SEED_TO_CRITIC: bool = False
 
+class ObserverConfig(StrictModel):
+    """One diagnostic logging observer, instantiated via the observer registry.
+
+    Observers hook into the CA rollout on logging steps, collect data, and log
+    it themselves (to W&B and/or console) during the logging phase. New observer
+    types are added by implementing ``LoggingObserver`` and registering them in
+    ``LOGGING_OBSERVER_REGISTRY`` — no change to this schema is required.
+
+    Attributes:
+        TYPE: Registry key selecting the observer implementation.
+        PARAMS: Keyword arguments forwarded to the observer's constructor.
+    """
+    TYPE: str
+    PARAMS: dict = Field(default_factory=dict)
+
+    @field_validator("TYPE")
+    @classmethod
+    def check_type(cls, value):
+        from nca.training.observers import LOGGING_OBSERVER_REGISTRY
+        if value not in LOGGING_OBSERVER_REGISTRY:
+            raise ValueError(
+                f"LOGGING.OBSERVERS.TYPE must be one of "
+                f"{sorted(LOGGING_OBSERVER_REGISTRY)}."
+            )
+        return value
+
+
 class LoggingConfig(StrictModel):
     """All logging, run-identity and output configuration.
 
@@ -463,6 +490,7 @@ class LoggingConfig(StrictModel):
     LOG_INTERVAL: int = 100
     SAVE_INTERVAL: int = 10000
     INTERMEDIATE_LOGGING_STEPS: List[int] = [5, 15, 25]
+    OBSERVERS: List[ObserverConfig] = Field(default_factory=list)
 
 
 class Config(StrictModel):

@@ -137,7 +137,7 @@ class CAModel(nn.Module, ABC):
                 )
         return x
 
-    def forward(self, x, cond=None, step_size=1.0, freeze_channels=None, return_residuals=False):
+    def forward(self, x, cond=None, step_size=1.0, freeze_channels=None):
         """Apply one CA update step.
 
         Args:
@@ -149,12 +149,11 @@ class CAModel(nn.Module, ABC):
                 update (analogous to a learning rate at inference time).
             freeze_channels: If set to integer ``k``, channels ``0..k`` are
                 held fixed; only channels ``k+1..`` are updated.
-            return_residuals: If ``True``, returns ``(new_state, dx)`` instead
-                of just ``new_state``.
 
         Returns:
-            Updated state tensor ``[B, C, H, W]``, or ``(state, dx)`` if
-            ``return_residuals=True``.
+            Tuple ``(state, dx)``: the updated state tensor ``[B, C, H, W]`` and
+            the per-step update delta ``dx`` (computed regardless, so it is
+            returned for free — diagnostics/observers can use it without a flag).
         """
         original_state_full = x
         frozen_layers = None
@@ -191,9 +190,7 @@ class CAModel(nn.Module, ABC):
 
         if freeze_channels is not None and freeze_channels > 0:
             state = torch.cat([frozen_layers, state], dim=1)
-        if return_residuals:
-            return state, dx
-        return state
+        return state, dx
 
     def _perception_with_positional_embeddings(self, x):
         """Generate positional embeddings and pass them only to perception."""

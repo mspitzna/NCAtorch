@@ -2,9 +2,9 @@
 Tests for CAModel forward pass.
 
 Covers:
+  - forward always returns (state, dx) with correct shapes
   - output shape matches input state shape
   - gradients flow back through forward()
-  - return_residuals returns (state, dx) with correct shapes
   - freeze_channels leaves frozen channels unchanged
   - step_size=0 produces no change to state
   - 2D and 4D condition tensors are handled correctly
@@ -65,13 +65,32 @@ def _make_ca(
 
 
 # ---------------------------------------------------------------------------
+# Forward contract: always returns (state, dx)
+# ---------------------------------------------------------------------------
+
+def test_forward_returns_state_and_dx_tuple():
+    model = _make_ca()
+    x = torch.rand(B, CH, H, W)
+    result = model(x)
+    assert isinstance(result, tuple) and len(result) == 2
+
+
+def test_forward_state_and_dx_shapes():
+    model = _make_ca()
+    x = torch.rand(B, CH, H, W)
+    state, dx = model(x)
+    assert state.shape == (B, CH, H, W)
+    assert dx.shape == (B, CH, H, W)
+
+
+# ---------------------------------------------------------------------------
 # Output shape
 # ---------------------------------------------------------------------------
 
 def test_output_shape_no_cond():
     model = _make_ca()
     x = torch.rand(B, CH, H, W)
-    out = model(x)
+    out, _ = model(x)
     assert out.shape == (B, CH, H, W)
 
 
@@ -79,7 +98,7 @@ def test_output_shape_2d_cond():
     model = _make_ca(cond_dim=COND_DIM)
     x = torch.rand(B, CH, H, W)
     cond = torch.rand(B, COND_DIM)
-    out = model(x, cond=cond)
+    out, _ = model(x, cond=cond)
     assert out.shape == (B, CH, H, W)
 
 
@@ -87,7 +106,7 @@ def test_output_shape_4d_cond():
     model = _make_ca(cond_dim=COND_DIM)
     x = torch.rand(B, CH, H, W)
     cond = torch.rand(B, COND_DIM, H, W)
-    out = model(x, cond=cond)
+    out, _ = model(x, cond=cond)
     assert out.shape == (B, CH, H, W)
 
 
@@ -98,28 +117,9 @@ def test_output_shape_4d_cond():
 def test_gradients_flow():
     model = _make_ca()
     x = torch.rand(B, CH, H, W, requires_grad=True)
-    out = model(x)
+    out, _ = model(x)
     out.sum().backward()
     assert x.grad is not None
-
-
-# ---------------------------------------------------------------------------
-# return_residuals
-# ---------------------------------------------------------------------------
-
-def test_return_residuals_returns_tuple():
-    model = _make_ca()
-    x = torch.rand(B, CH, H, W)
-    result = model(x, return_residuals=True)
-    assert isinstance(result, tuple) and len(result) == 2
-
-
-def test_return_residuals_shapes():
-    model = _make_ca()
-    x = torch.rand(B, CH, H, W)
-    state, dx = model(x, return_residuals=True)
-    assert state.shape == (B, CH, H, W)
-    assert dx.shape == (B, CH, H, W)
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +130,7 @@ def test_step_size_zero_produces_no_change():
     """step_size=0 multiplies dx to zero, so output must equal input."""
     model = _make_ca()
     x = torch.rand(B, CH, H, W)
-    out = model(x, step_size=0.0)
+    out, _ = model(x, step_size=0.0)
     assert torch.allclose(out, x, atol=1e-6)
 
 
@@ -140,8 +140,8 @@ def test_step_size_scales_update():
     model.eval()
     x = torch.rand(B, CH, H, W)
     with torch.no_grad():
-        out_small = model(x, step_size=0.01)
-        out_large = model(x, step_size=10.0)
+        out_small, _ = model(x, step_size=0.01)
+        out_large, _ = model(x, step_size=10.0)
     diff_small = (out_small - x).abs().mean()
     diff_large = (out_large - x).abs().mean()
     assert diff_large > diff_small
@@ -156,7 +156,7 @@ def test_freeze_channels_unchanged():
     freeze = 3
     model = _make_ca()
     x = torch.rand(B, CH, H, W)
-    out = model(x, freeze_channels=freeze)
+    out, _ = model(x, freeze_channels=freeze)
     assert torch.allclose(out[:, :freeze], x[:, :freeze])
 
 
@@ -165,7 +165,7 @@ def test_freeze_channels_unfrozen_can_change():
     freeze = 3
     model = _make_ca()
     x = torch.rand(B, CH, H, W)
-    out = model(x, step_size=1.0, freeze_channels=freeze)
+    out, _ = model(x, step_size=1.0, freeze_channels=freeze)
     # At least some unfrozen channels should differ (with high probability)
     assert not torch.allclose(out[:, freeze:], x[:, freeze:])
 
@@ -187,7 +187,7 @@ def test_cond_4d_spatial_mismatch_is_interpolated():
     model = _make_ca(cond_dim=COND_DIM)
     x = torch.rand(B, CH, H, W)
     cond = torch.rand(B, COND_DIM, H // 2, W // 2)  # half spatial size
-    out = model(x, cond=cond)
+    out, _ = model(x, cond=cond)
     assert out.shape == (B, CH, H, W)
 
 
@@ -198,7 +198,7 @@ def test_cond_4d_spatial_mismatch_is_interpolated():
 def test_positional_embeddings_output_shape():
     model = _make_ca(use_positional_embeddings=True)
     x = torch.rand(B, CH, H, W)
-    out = model(x)
+    out, _ = model(x)
     assert out.shape == (B, CH, H, W)
 
 
@@ -254,5 +254,5 @@ def test_pipeline_variants_output_shape(pipeline):
     """All supported pipeline configurations must produce correct output shape."""
     model = _make_ca(pipeline=pipeline)
     x = torch.rand(B, CH, H, W)
-    out = model(x)
+    out, _ = model(x)
     assert out.shape == (B, CH, H, W)

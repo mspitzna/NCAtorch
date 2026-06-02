@@ -20,6 +20,14 @@ LOGGING:
   SAVE_INTERVAL: 10000       # Save checkpoint every N steps
   INTERMEDIATE_LOGGING_STEPS: [5, 15, 25]  # CA rollout steps logged as intermediate states (all < ITER_N_MIN)
 
+  # Diagnostic step observers — hook into the CA rollout on logging steps,
+  # collect data, and log it themselves (W&B / console). Each entry selects a
+  # TYPE from LOGGING_OBSERVER_REGISTRY; PARAMS are forwarded to its constructor.
+  # Add new observers by subclassing LoggingObserver and registering them.
+  # (Incompatible with TRAINING.GRADIENT_CHECKPOINTING — disabled with a warning.)
+  OBSERVERS: []
+    # - TYPE: iteration_stats       # channel-averaged min/max/mean/std over CA iterations (W&B only)
+
 # -----------------------------------------------------------------------------
 # MODEL — CA architecture
 # -----------------------------------------------------------------------------

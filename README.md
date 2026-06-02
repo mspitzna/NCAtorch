@@ -136,10 +136,16 @@ ncatorch-ui --reload
 Models and training are configured via YAML files. Each perception entry declares its own `OUT_CHANNEL` to set the number of filters emitted from that branch. Here's a basic example:
 
 ```yaml
-PROJECT_NAME: "your_project"        # High-level grouping for experiment tracking
-TRAIN_NAME: "your_training_0"       # Unique name for this training run
 SEED: 42                            # Random seed (-1 for random)
 DEVICE: "cuda"
+
+LOGGING:
+  WANDB: true
+  PROJECT_NAME: "your_project"
+  TRAIN_NAME: "your_run_name"
+  LOG_INTERVAL: 500
+  SAVE_INTERVAL: 25000
+  INTERMEDIATE_LOGGING_STEPS: [5, 20, 35]  # Steps at which intermediate states are logged (must be < ITER_N_MIN)
 
 MODEL:
   NAME: "MLP"                       # Update model architecture: MLP or ResNet
@@ -164,7 +170,6 @@ TRAINING:
   WARMUP_STEPS: 2000                # Linear LR warm-up duration
   ITER_N_MIN: 20                    # Minimum CA rollout steps per batch
   ITER_N_MAX: 26                    # Maximum CA rollout steps per batch (sampled uniformly)
-  INTERMEDIATE_LOGGING_STEPS: [5, 10, 15]  # Must all be < ITER_N_MIN
 
 DATASET:
   NAME: "emoji"                     # Dataset: for example emoji, e2h, mnist, cifar10
@@ -232,6 +237,7 @@ nca-torch/
 | [Custom Update Module](docs/custom_update_module_guide.md) | Add a new update architecture |
 | [Custom Dataset](docs/custom_dataset_guide.md) | Add a new dataset and wire it into the training pipeline |
 | [Custom Trainer](docs/custom_trainer_guide.md) | Add a new training loop by implementing two methods and registering one entry |
+| [Custom Logging Observer](docs/custom_observer_guide.md) | Add a diagnostic that hooks into the CA rollout and logs itself |
 
 ## 📝 Citation
 

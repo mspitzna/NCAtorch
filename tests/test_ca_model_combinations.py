@@ -112,7 +112,7 @@ def test_output_shape_preserved(perc_key, update_key):
     """Output shape must equal input shape for every combination."""
     model = _make_ca(perc_key, update_key)
     x = torch.rand(B, CH, H, W)
-    out = model(x)
+    out, _ = model(x)
     assert out.shape == x.shape, (
         f"[{perc_key} + {update_key}] input {tuple(x.shape)}, output {tuple(out.shape)}"
     )
@@ -127,7 +127,7 @@ def test_gradients_flow(perc_key, update_key):
     """Gradients must reach the input for every combination."""
     model = _make_ca(perc_key, update_key)
     x = torch.rand(B, CH, H, W, requires_grad=True)
-    model(x).sum().backward()
+    model(x)[0].sum().backward()
     assert x.grad is not None, (
         f"[{perc_key} + {update_key}] gradients did not reach the input"
     )
@@ -142,7 +142,7 @@ def test_latent_wrapper_pixel_space_shape_preserved(perc_key, update_key):
     """evolve_in_pixel_space output shape must equal input shape."""
     wrapper = _make_latent_wrapper(perc_key, update_key)
     x = torch.rand(B, LATENT_CH, LATENT_H, LATENT_W)
-    out = wrapper.evolve_in_pixel_space(x)
+    out, _ = wrapper.evolve_in_pixel_space(x)
     assert out.shape == x.shape, (
         f"[{perc_key} + {update_key}] pixel space: input {tuple(x.shape)}, output {tuple(out.shape)}"
     )
@@ -159,7 +159,7 @@ def test_latent_wrapper_latent_space_shape_preserved(perc_key, update_key):
     # Input is in pixel space — the wrapper encodes, evolves, then decodes
     wrapper.config.LATENT_TRAINING.LATENT_AE_IN_CHANNEL = PIXEL_IN_CH
     x = torch.rand(B, PIXEL_IN_CH, PIXEL_H, PIXEL_W)
-    out = wrapper.evolve_in_latent_space(x)
+    out, _ = wrapper.evolve_in_latent_space(x)
     assert out.shape == x.shape, (
         f"[{perc_key} + {update_key}] latent space: input {tuple(x.shape)}, output {tuple(out.shape)}"
     )

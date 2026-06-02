@@ -90,35 +90,19 @@ def _mean_rollout_values(values: list[RolloutValue]) -> RolloutValue:
 
 
 class Evolver(nn.Module, ABC):
-    """Base interface for CA rollout strategies.
+    """Base interface for CA rollout strategies (template method).
 
-    Evolvers own the per-step rollout loop. Different implementations can
-    change how conditions are prepared at each step, add clocks, alter update
-    schedules, or customize checkpointing without changing trainer logic.
-    """
+    ``Evolver`` owns the entire rollout *scaffolding* — the iteration loop,
+    activation checkpointing, intermediate-state logging, building the
+    :class:`StepContext`, invoking step observers, and aggregating the
+    :class:`RolloutOutput`. Concrete strategies implement only :meth:`step`,
+    the single CA update, so they can change how conditions are prepared per
+    step, add clocks, or alter the update schedule without re-implementing any
+    of the observer/logging machinery.
 
-    @abstractmethod
-    def forward(
-        self,
-        ca_model: nn.Module,
-        state_in: torch.Tensor,
-        conds: torch.Tensor | None,
-        iter_n: int,
-        logger=None,
-        freeze_channels: int | None = None,
-        logging: bool = False,
-        step_observers: list[StepObserver] | None = None,
-        return_rollout: bool = False,
-    ) -> torch.Tensor | tuple[torch.Tensor, RolloutOutput]:
-        pass
-
-
-class BaseEvolver(Evolver):
-    """Default NCA rollout.
-
-    This preserves the previous ``BaseTrainer._evolve`` behavior: reuse the
-    same condition for every step, optionally log intermediate states, and use
-    activation checkpointing when configured.
+    Override :meth:`forward` directly only for a fundamentally different loop
+    structure; in that case reuse :meth:`_invoke_observers` to keep the
+    observer contract centralized.
     """
 
     def __init__(
@@ -131,6 +115,55 @@ class BaseEvolver(Evolver):
         self.gradient_checkpointing = gradient_checkpointing
         self.checkpoint_segments = checkpoint_segments
         self.intermediate_logging_steps = set(intermediate_logging_steps or [])
+
+    @abstractmethod
+    def step(
+        self,
+        ca_model: nn.Module,
+        state: torch.Tensor,
+        conds: torch.Tensor | None,
+        step_index: int,
+        iter_n: int,
+        freeze_channels: int | None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Apply one CA update and return ``(new_state, dx)``.
+
+        This is the only method a rollout strategy must implement. ``dx`` is
+        the per-step update delta exposed to observers via ``StepContext.dx``.
+        """
+
+    def _invoke_observers(
+        self,
+        observers: list[StepObserver],
+        rollout_output: RolloutOutput | None,
+        *,
+        step_index: int,
+        previous_state: torch.Tensor,
+        new_state: torch.Tensor,
+        conds: torch.Tensor | None,
+        ca_model: nn.Module,
+        freeze_channels: int | None,
+        dx: torch.Tensor,
+    ) -> None:
+        """Build the StepContext and dispatch it to every observer (centralized)."""
+        if not observers:
+            return
+        context = StepContext(
+            step_index=step_index,
+            previous_state=previous_state,
+            next_state=new_state,
+            condition=conds,
+            ca_model=ca_model,
+            freeze_channels=freeze_channels,
+            dx=dx,
+        )
+        for observer in observers:
+            observer_output = observer(context)
+            if observer_output is None:
+                continue
+            if not isinstance(observer_output, StepObserverOutput):
+                raise TypeError("Step observers must return None or StepObserverOutput.")
+            rollout_output.add_step_output(observer_output)
 
     def forward(
         self,
@@ -163,10 +196,8 @@ class BaseEvolver(Evolver):
         with torch.set_grad_enabled(ca_model.training):
             def evolve_step(step, current_state):
                 previous_state = current_state
-                new_state = ca_model(
-                    current_state,
-                    conds,
-                    freeze_channels=freeze_channels,
+                new_state, dx = self.step(
+                    ca_model, current_state, conds, step, iter_n, freeze_channels
                 )
                 if (
                     logging
@@ -174,25 +205,17 @@ class BaseEvolver(Evolver):
                     and step in self.intermediate_logging_steps
                 ):
                     logger.add_state_log(step, new_state)
-                if observers:
-                    context = StepContext(
-                        step_index=step,
-                        previous_state=previous_state,
-                        next_state=new_state,
-                        condition=conds,
-                        ca_model=ca_model,
-                        freeze_channels=freeze_channels,
-                    )
-                    for observer in observers:
-                        observer_output = observer(context)
-                        if observer_output is None:
-                            continue
-                        if not isinstance(observer_output, StepObserverOutput):
-                            raise TypeError(
-                                "Step observers must return None or "
-                                "StepObserverOutput."
-                            )
-                        rollout_output.add_step_output(observer_output)
+                self._invoke_observers(
+                    observers,
+                    rollout_output,
+                    step_index=step,
+                    previous_state=previous_state,
+                    new_state=new_state,
+                    conds=conds,
+                    ca_model=ca_model,
+                    freeze_channels=freeze_channels,
+                    dx=dx,
+                )
                 return new_state
 
             if not self.gradient_checkpointing:
@@ -214,3 +237,15 @@ class BaseEvolver(Evolver):
         if return_rollout:
             return state, rollout_output
         return state
+
+
+class BaseEvolver(Evolver):
+    """Default NCA rollout: reuse the same condition for every step.
+
+    All rollout scaffolding (loop, checkpointing, intermediate logging,
+    observers, aggregation) lives in :class:`Evolver`; this strategy only
+    defines the per-step CA update.
+    """
+
+    def step(self, ca_model, state, conds, step_index, iter_n, freeze_channels):
+        return ca_model(state, conds, freeze_channels=freeze_channels)

@@ -101,15 +101,15 @@ class CaHandler:
                 else:
                     x_latent = x_tensor
                 for _ in range(n_steps):
-                    x_latent = self.ca_model(x_latent, cond)
+                    x_latent, _ = self.ca_model(x_latent, cond)
                 x_tensor = self.ae.decode(x_latent)
                 return x_tensor, x_latent
             elif self.config.DATASET.NAME == "mnist":
                 for _ in range(n_steps):
-                    x_tensor = self.ca_model(x_tensor, cond, freeze_channels=1)
+                    x_tensor, _ = self.ca_model(x_tensor, cond, freeze_channels=1)
             else:
                 for _ in range(n_steps):
-                    x_tensor = self.ca_model(x_tensor, cond)
+                    x_tensor, _ = self.ca_model(x_tensor, cond)
         return x_tensor, x_tensor
 
     def get_ui_config(self):

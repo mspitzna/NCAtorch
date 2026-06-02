@@ -11,7 +11,8 @@ from nca.utils.config import Config
 
 class AddOneCA(nn.Module):
     def forward(self, x, cond=None, freeze_channels=None):
-        return x + 1.0
+        dx = torch.ones_like(x)
+        return x + dx, dx
 
 
 class ParamAddCA(nn.Module):
@@ -20,7 +21,8 @@ class ParamAddCA(nn.Module):
         self.delta = nn.Parameter(torch.ones(()))
 
     def forward(self, x, cond=None, freeze_channels=None):
-        return x + self.delta
+        dx = self.delta.expand_as(x)
+        return x + dx, dx
 
 
 class DummyLoader:
