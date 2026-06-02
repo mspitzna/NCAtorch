@@ -63,8 +63,8 @@ class BaseTrainer(ABC):
         self.use_latent = use_latent
         self.setup_seed(self.config.SEED)
         self.steps = self.config.TRAINING.STEPS
-        self.log_interval = self.config.TRAINING.LOG_INTERVAL
-        self.save_interval = self.config.TRAINING.SAVE_INTERVAL
+        self.log_interval = self.config.LOGGING.LOG_INTERVAL
+        self.save_interval = self.config.LOGGING.SAVE_INTERVAL
         self.gradient_checkpointing = config.TRAINING.GRADIENT_CHECKPOINTING
         self.accumulation_steps = config.TRAINING.GRADIENT_ACCUMULATION_STEPS
         self.scaler = (
@@ -81,7 +81,7 @@ class BaseTrainer(ABC):
         self._interval_metric_buffer = {}
 
         self.intermediate_logging_steps = (
-            self.config.TRAINING.INTERMEDIATE_LOGGING_STEPS
+            self.config.LOGGING.INTERMEDIATE_LOGGING_STEPS
         )
         self.evolver = create_evolver(config)
 

@@ -162,11 +162,8 @@ class TrainingConfig(StrictModel):
     MILESTONES: List[int] = [2000, 8000]
     LR_GAMMA: float = 0.1
     OPTIMIZER_BETAS: List[float] = [0.9, 0.999]
-    LOG_INTERVAL: int = 100
-    SAVE_INTERVAL: int = 10000
     ITER_N_MIN: int = 32
     ITER_N_MAX: int = 64
-    INTERMEDIATE_LOGGING_STEPS: List[int] = [5, 15, 25]
     GRADIENT_CLIPPING_NORM: float = 1.0
     GRADIENT_CHECKPOINTING: bool = False
     GRADIENT_CHECKPOINT_SEGMENTS: int = 16
@@ -232,19 +229,6 @@ class TrainingConfig(StrictModel):
             raise ValueError("LEARNING_RATE must be between 0 and 1.")
         return value
 
-    @field_validator("INTERMEDIATE_LOGGING_STEPS")
-    @classmethod
-    def check_logging_steps(cls, value, values):
-        """Ensure all intermediate logging steps are lower than ITER_N_MIN"""
-        iter_n_min = values.data.get("ITER_N_MIN") 
-        if iter_n_min is not None:
-            for step in value:
-                if step >= iter_n_min:
-                    raise ValueError(
-                        f"INTERMEDIATE_LOGGING_STEPS contains {step}, but it must be less than ITER_N_MIN ({iter_n_min})."
-                    )
-        return value
-    
     @field_validator("GRADIENT_CHECKPOINT_SEGMENTS")
     @classmethod
     def check_checkpoint_segments(cls, value):
@@ -405,7 +389,6 @@ class TorchCompileConfig(StrictModel):
             raise ValueError(f"TORCH_COMPILE.MODE must be one of {sorted(allowed)}.")
         return value
 
-
 class AdversarialConfig(StrictModel):
     """Configuration for optional GAN (adversarial) training.
 
@@ -451,15 +434,42 @@ class AdversarialConfig(StrictModel):
     RECON_WEIGHT: float = 1.0
     SEED_TO_CRITIC: bool = False
 
-class Config(StrictModel):
+class LoggingConfig(StrictModel):
+    """All logging, run-identity and output configuration.
+
+    Consolidates every knob that controls *how/where* a run reports itself —
+    W&B, run naming, the output folder, and the logging/checkpoint intervals —
+    so logging concerns live in one place and the framework can be extended
+    (e.g. with diagnostic step observers) without scattering new flags across
+    ``Config`` and ``TrainingConfig``.
+
+    Attributes:
+        WANDB: Enable Weights & Biases logging.
+        PROJECT_NAME: W&B project / top-level output folder name.
+        TRAIN_NAME: Run name (sub-folder under ``PROJECT_NAME``).
+        FOLDER_NAME: Explicit output/checkpoint folder; ``None`` = auto from
+            ``TRAIN_NAME`` + timestamp.
+        DEBUG: Verbose debug output.
+        LOG_INTERVAL: Log metrics/images every N training steps.
+        SAVE_INTERVAL: Save a checkpoint every N training steps.
+        INTERMEDIATE_LOGGING_STEPS: CA rollout steps at which intermediate
+            states are captured for image logging (all must be < ITER_N_MIN).
+    """
+    WANDB: bool = Field(default=False, description="Enable Weights & Biases logging")
     PROJECT_NAME: str = "growing_ca"
-    FOLDER_NAME: str = None
     TRAIN_NAME: str = "TEST"
+    FOLDER_NAME: Optional[str] = None
+    DEBUG: bool = False
+    LOG_INTERVAL: int = 100
+    SAVE_INTERVAL: int = 10000
+    INTERMEDIATE_LOGGING_STEPS: List[int] = [5, 15, 25]
+
+
+class Config(StrictModel):
     SEED: int = -1
     DEVICE: str = "cuda"
-    WANDB: bool = Field(default=False, description="Enable Weights & Biases logging")
-    DEBUG: bool = False
 
+    LOGGING: LoggingConfig = Field(default_factory=LoggingConfig)
     MODEL: ModelConfig = Field(default_factory=ModelConfig)
     TRAINING: TrainingConfig = Field(default_factory=TrainingConfig)
     DATASET: DatasetConfig = Field(default_factory=DatasetConfig)
@@ -503,8 +513,8 @@ class Config(StrictModel):
         if self.TRAINING.ITER_N_MIN > self.TRAINING.ITER_N_MAX:
             raise ValueError("ITER_N_MIN cannot be greater than ITER_N_MAX")
             
-        if any(step >= self.TRAINING.ITER_N_MIN for step in self.TRAINING.INTERMEDIATE_LOGGING_STEPS):
-            raise ValueError("All INTERMEDIATE_LOGGING_STEPS must be < ITER_N_MIN")
+        if any(step >= self.TRAINING.ITER_N_MIN for step in self.LOGGING.INTERMEDIATE_LOGGING_STEPS):
+            raise ValueError("All LOGGING.INTERMEDIATE_LOGGING_STEPS must be < TRAINING.ITER_N_MIN")
 
     def set_cond_dim(self, cond_dim: int):
         self.COND_DIM = cond_dim

@@ -1,8 +1,16 @@
-PROJECT_NAME: "ot_spiralled"                 # Name of the project
-TRAIN_NAME: "ot_spiralled_3x3"              # Name of the training run
 SEED: 41                                  # Random seed
 DEVICE: "cuda"                             # Device to use for training
-WANDB: false                               # Flag to enable logging to Weights & Biases
+
+# ---------------------------------------------------------------------------
+# LOGGING — run identity, W&B and logging/checkpoint intervals
+# ---------------------------------------------------------------------------
+LOGGING:
+  WANDB: false                               # Flag to enable logging to Weights & Biases
+  PROJECT_NAME: "ot_spiralled"                 # Name of the project
+  TRAIN_NAME: "ot_spiralled_3x3"              # Name of the training run
+  LOG_INTERVAL: 1000
+  SAVE_INTERVAL: 100000
+  INTERMEDIATE_LOGGING_STEPS: [3]
 
 MODEL:
   NAME: "MLP"
@@ -27,12 +35,9 @@ TRAINING:
   WARMUP_STEPS: 1000
   OVERFLOW_LOSS: true
   LR_GAMMA: 0.1
-  LOG_INTERVAL: 1000
-  SAVE_INTERVAL: 100000
   ITER_N_MIN: 5
   ITER_N_MAX: 6
   MIXED_PRECISION: false
-  INTERMEDIATE_LOGGING_STEPS: [3]
   GRADIENT_CLIPPING_NORM: 1.0
   GRADIENT_CHECKPOINTING: false
   GRADIENT_CHECKPOINT_SEGMENTS: 10

@@ -14,7 +14,7 @@ EVOLVER_REGISTRY = {
     "base": lambda config: BaseEvolver(
         gradient_checkpointing=config.TRAINING.GRADIENT_CHECKPOINTING,
         checkpoint_segments=config.TRAINING.GRADIENT_CHECKPOINT_SEGMENTS,
-        intermediate_logging_steps=config.TRAINING.INTERMEDIATE_LOGGING_STEPS,
+        intermediate_logging_steps=config.LOGGING.INTERMEDIATE_LOGGING_STEPS,
     ),
 }
 

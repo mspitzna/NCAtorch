@@ -32,7 +32,7 @@ class LatentWrapper(nn.Module):
         ae, reconstruction_criterion, vae_kl_beta = create_latent_encoder(self.config, self.device)
 
         # Load AE weights
-        folder_name = self.config.FOLDER_NAME
+        folder_name = self.config.LOGGING.FOLDER_NAME
         if folder_name != "??testing":
             ae_checkpoint = self.config.LATENT_TRAINING.AE_CHECKPOINT
             checkpoint_file = get_checkpoint_filename(self.config.LATENT_TRAINING.ENCODER_TYPE)

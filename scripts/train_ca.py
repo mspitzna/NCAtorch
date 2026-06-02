@@ -119,7 +119,9 @@ def main():
         # Load config from the specified folder
         print(f"Loading config from folder: {args.folder}")
         config = load_config(f"{args.folder}/config.yaml")
-        config = config.model_copy(update={"FOLDER_NAME": args.folder})
+        config = config.model_copy(
+            update={"LOGGING": config.LOGGING.model_copy(update={"FOLDER_NAME": args.folder})}
+        )
     else:
         # If no folder is specified, load config from the provided path
         if not args.config or not os.path.exists(args.config):
@@ -141,12 +143,14 @@ def main():
     if use_sweep:
         import wandb
         # Ensure wandb logging is on for sweeps
-        if not config.WANDB:
-            config = config.model_copy(update={"WANDB": True})
+        if not config.LOGGING.WANDB:
+            config = config.model_copy(
+                update={"LOGGING": config.LOGGING.model_copy(update={"WANDB": True})}
+            )
         base_cfg = config.model_dump(exclude_none=True)
         wandb.init(
-            project=config.PROJECT_NAME,
-            name=config.TRAIN_NAME,
+            project=config.LOGGING.PROJECT_NAME,
+            name=config.LOGGING.TRAIN_NAME,
             config=base_cfg,
         )
         # Convert wandb config to plain dict, drop private keys, then flatten for dot-path overrides

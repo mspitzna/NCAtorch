@@ -95,17 +95,17 @@ def main():
     # Get model type from config, default to AE
     model_type = config.LATENT_TRAINING.ENCODER_TYPE
 
-    model_output_folder, vis_output_folder = setup_output_folder(args.config, config.TRAIN_NAME)
+    model_output_folder, vis_output_folder = setup_output_folder(args.config, config.LOGGING.TRAIN_NAME)
     print(f"Model Type: {model_type}")
     print(f"Model Checkpoints: {model_output_folder}")
     print(f"Visualizations: {vis_output_folder}")
 
     # Initialize wandb only if enabled
-    use_wandb = getattr(config, 'WANDB', False)
+    use_wandb = config.LOGGING.WANDB
     if use_wandb:
         wandb.init(
-            project=f"{config.PROJECT_NAME}",
-            name=f"{config.TRAIN_NAME}_{model_type.lower()}",
+            project=f"{config.LOGGING.PROJECT_NAME}",
+            name=f"{config.LOGGING.TRAIN_NAME}_{model_type.lower()}",
             config={
                 "model_type": model_type,
                 "latent_channels": config.LATENT_TRAINING.LATENT_AE_CHANNEL,

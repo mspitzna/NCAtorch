@@ -4,13 +4,21 @@
 # Delete or comment out any section/field you don't need.
 # =============================================================================
 
-PROJECT_NAME: "growing_ca"   # W&B project / output folder name
-TRAIN_NAME: "TEST"           # Run name (sub-folder under PROJECT_NAME)
-FOLDER_NAME: null            # Override checkpoint folder; null = auto (PROJECT_NAME/TRAIN_NAME)
 SEED: -1                     # Random seed; -1 = no fixed seed
 DEVICE: "cuda"               # e.g. "cuda" | "cpu"
-WANDB: false                 # Enable Weights & Biases logging
-DEBUG: false                 # Verbose debug output
+
+# -----------------------------------------------------------------------------
+# LOGGING — run identity, W&B, output folder and logging/checkpoint intervals
+# -----------------------------------------------------------------------------
+LOGGING:
+  WANDB: false               # Enable Weights & Biases logging
+  PROJECT_NAME: "growing_ca" # W&B project / output folder name
+  TRAIN_NAME: "TEST"         # Run name (sub-folder under PROJECT_NAME)
+  FOLDER_NAME: null          # Override output folder; null = auto (TRAIN_NAME + timestamp)
+  DEBUG: false               # Verbose debug output
+  LOG_INTERVAL: 100          # Log metrics/images every N steps
+  SAVE_INTERVAL: 10000       # Save checkpoint every N steps
+  INTERMEDIATE_LOGGING_STEPS: [5, 15, 25]  # CA rollout steps logged as intermediate states (all < ITER_N_MIN)
 
 # -----------------------------------------------------------------------------
 # MODEL — CA architecture
@@ -73,10 +81,6 @@ TRAINING:
 
   ITER_N_MIN: 32             # Minimum CA rollout steps per batch
   ITER_N_MAX: 64             # Maximum CA rollout steps per batch (sampled uniformly)
-  INTERMEDIATE_LOGGING_STEPS: [5, 15, 25]  # Steps at which intermediate states are logged (all must be < ITER_N_MIN)
-
-  LOG_INTERVAL: 100          # Log metrics every N steps
-  SAVE_INTERVAL: 10000       # Save checkpoint every N steps
 
   GRADIENT_CLIPPING_NORM: 1.0         # Max gradient norm; 0 = disabled
   GRADIENT_CHECKPOINTING: false       # Trade compute for memory via activation checkpointing

@@ -40,12 +40,14 @@ def make_test_config(tmp_path, gradient_checkpointing=False):
     return Config(
         DATASET={"NAME": "cifar10"},
         DEVICE="cpu",
-        FOLDER_NAME=str(tmp_path / "logs"),
+        LOGGING={
+            "FOLDER_NAME": str(tmp_path / "logs"),
+            "INTERMEDIATE_LOGGING_STEPS": [],
+        },
         COND_DIM=0,
         TRAINING={
             "ITER_N_MIN": 3,
             "ITER_N_MAX": 3,
-            "INTERMEDIATE_LOGGING_STEPS": [],
             "GRADIENT_CHECKPOINTING": gradient_checkpointing,
         },
     )

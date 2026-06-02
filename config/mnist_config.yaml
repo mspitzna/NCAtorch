@@ -1,8 +1,16 @@
-PROJECT_NAME: "mnist"                 # Name of the project
-TRAIN_NAME: "mnist_mse"              # Name of the training run
 SEED: 42                                  # Random seed
 DEVICE: "cuda"                             # Device to use for training
-WANDB: false                               # Flag to enable logging to Weights & Biases
+
+# ---------------------------------------------------------------------------
+# LOGGING — run identity, W&B and logging/checkpoint intervals
+# ---------------------------------------------------------------------------
+LOGGING:
+  WANDB: false                               # Flag to enable logging to Weights & Biases
+  PROJECT_NAME: "mnist"                 # Name of the project
+  TRAIN_NAME: "mnist_mse"              # Name of the training run
+  LOG_INTERVAL: 500
+  SAVE_INTERVAL: 25000
+  INTERMEDIATE_LOGGING_STEPS: [5, 10, 15]
 
 MODEL:
   NAME: "MLP"
@@ -30,11 +38,8 @@ TRAINING:
   WARMUP_STEPS: 5000
   OVERFLOW_LOSS: true
   LR_GAMMA: 0.1
-  LOG_INTERVAL: 500
-  SAVE_INTERVAL: 25000
   ITER_N_MIN: 20
   ITER_N_MAX: 30
-  INTERMEDIATE_LOGGING_STEPS: [5, 10, 15]
   GRADIENT_CLIPPING_NORM: 1.0
   GRADIENT_CHECKPOINTING: false
   GRADIENT_CHECKPOINT_SEGMENTS: 10

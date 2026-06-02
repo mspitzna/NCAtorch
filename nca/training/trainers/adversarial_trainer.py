@@ -82,8 +82,8 @@ class AdversarialTrainer(BaseTrainer):
             raise ValueError(f"Unknown RECON_LOSS_TYPE: {recon_loss_type}")
         print(f"Using reconstruction loss: {recon_loss_type}")
 
-        if self.config.WANDB:
-            wandb.watch(self.critic, log="all", log_freq=self.config.TRAINING.LOG_INTERVAL)
+        if self.config.LOGGING.WANDB:
+            wandb.watch(self.critic, log="all", log_freq=self.config.LOGGING.LOG_INTERVAL)
 
     def _run_train_step(self, initial_state, cond, target, logging=False):
         """

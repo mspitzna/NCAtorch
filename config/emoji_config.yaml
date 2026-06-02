@@ -1,8 +1,16 @@
-PROJECT_NAME: "emoji"
-TRAIN_NAME: "emoji_3x3"
 SEED: 42
 DEVICE: "cuda"
-WANDB: false
+
+# ---------------------------------------------------------------------------
+# LOGGING — run identity, W&B and logging/checkpoint intervals
+# ---------------------------------------------------------------------------
+LOGGING:
+  WANDB: true
+  PROJECT_NAME: "emoji"
+  TRAIN_NAME: "emoji_3x3"
+  LOG_INTERVAL: 500
+  SAVE_INTERVAL: 25000
+  INTERMEDIATE_LOGGING_STEPS: [5, 20, 35]  # Steps at which intermediate states are logged (must be < ITER_N_MIN)
 
 MODEL:
   NAME: "MLP"                         # Update model architecture: MLP or ResNet
@@ -27,13 +35,10 @@ TRAINING:
   WARMUP_STEPS: 1000                  # Linear LR warm-up duration
   OVERFLOW_LOSS: true                 # Add overflow penalty to the loss
   OVERFLOW_WEIGHT: 1.0
-  LOG_INTERVAL: 500
-  SAVE_INTERVAL: 25000
   ITER_N_MIN: 38                      # Minimum CA rollout steps per batch
   ITER_N_MAX: 46                      # Maximum CA rollout steps per batch (sampled uniformly)
-  INTERMEDIATE_LOGGING_STEPS: [5, 20, 35]  # Steps at which intermediate states are logged (must be < ITER_N_MIN)
   GRADIENT_CLIPPING_NORM: 1.0         # Max gradient norm; 0 to disable
-  GRADIENT_CHECKPOINTING: true        # Trade compute for memory via activation checkpointing
+  GRADIENT_CHECKPOINTING: false        # Trade compute for memory via activation checkpointing
   GRADIENT_CHECKPOINT_SEGMENTS: 10
   GRADIENT_ACCUMULATION_STEPS: 1
   MIXED_PRECISION: true               # Enable automatic mixed precision (AMP)
