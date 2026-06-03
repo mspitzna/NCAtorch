@@ -285,7 +285,7 @@ def main():
         ))
 
         for step in range(1, iter_n + 1):
-            state = model(state, cond, freeze_channels=freeze_channels)
+            state, _ = model(state, cond, freeze_channels=freeze_channels)
             vis = ae.decode(state).detach().cpu() if ae is not None else state.detach().cpu()
             _, x_rgb, _ = colorize_state(vis)
             video_frames.append(_make_frame(
