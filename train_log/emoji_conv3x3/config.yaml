@@ -1,16 +1,12 @@
-PROJECT_NAME: "emoji"                 # Name of the project
-TRAIN_NAME: "emoji_conv3x3"              # Name of the training run
 SEED: 42                                  # Random seed
 DEVICE: "cuda"                             # Device to use for training
-WANDB: true                               # Flag to enable logging to Weights & Biases
-
 MODEL:
   NAME: "MLP"
   HIDDEN_CHANNELS: [80]
   CHANNEL_N: 16
   USE_POSITIONAL_EMBEDDINGS: False
   LIVING_MASK: true
-  NORMALIZE_OUTPUT: false
+  CLAMP_OUTPUT: false
   FINAL_ACTIVATION: false
   PERCEPTIONS:
     - MODE: "conv"
@@ -25,12 +21,9 @@ TRAINING:
   LOSS_FN: "mse"
   WARMUP_STEPS: 5000
   OVERFLOW_LOSS: true
-  GAMMA: 0.1
-  LOG_INTERVAL: 500
-  SAVE_INTERVAL: 25000
+  LR_GAMMA: 0.1
   ITER_N_MIN: 48
   ITER_N_MAX: 64
-  INTERMEDIATE_LOGGING_STEPS: [5, 20, 40]
   GRADIENT_CLIPPING_NORM: 1.0
   GRADIENT_CHECKPOINTING: false
   GRADIENT_CHECKPOINT_SEGMENTS: 10
@@ -56,3 +49,12 @@ PATTERN_POOL:
   POOL_DMG_RATIO: 0.5
   POOL_DMG_DELAY: 1
   POOL_MUTATION_RATIO: 0.5
+
+
+LOGGING:
+  WANDB: false
+  PROJECT_NAME: "emoji"                 # Name of the project
+  TRAIN_NAME: "emoji_conv3x3"              # Name of the training run
+  LOG_INTERVAL: 500
+  SAVE_INTERVAL: 25000
+  INTERMEDIATE_LOGGING_STEPS: [5, 20, 40]
