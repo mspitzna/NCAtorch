@@ -1,56 +1,53 @@
 // painting.js
 export function setupPaintBrush(ctx, brushSize = 1, color = [0, 0, 0]) {
     let drawing = false;
-  
+    const getSize = typeof brushSize === 'function' ? brushSize : () => brushSize;
+
     function draw(e) {
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
       ctx.fillStyle = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
-      ctx.beginPath();
-      ctx.arc(x, y, 1, 0, 2 * Math.PI);
-      ctx.fill();
-      sendPaintAction(x, y, brushSize, color);
+      ctx.fillRect(x - 1, y - 1, 2, 2);
+      sendPaintAction(x, y, getSize(), color);
     }
-  
+
     canvas.addEventListener("mousedown", (e) => {
       drawing = true;
       draw(e);
     });
-  
-    canvas.addEventListener("mouseup", () => (drawing = false));
-    canvas.addEventListener("mouseleave", () => (drawing = false));
-    canvas.addEventListener("mousemove", throttle((e) => {
+
+    window.addEventListener("mouseup", () => (drawing = false));
+    window.addEventListener("mousemove", throttle((e) => {
       if (drawing) draw(e);
-    }, 50));
+    }, 16));
   }
   
-  export function setupEraser(ctx, brushSize = 10) {
+export function setupEraser(ctx, brushSize = 10) {
     let erasing = false;
-  
+
     function erase(e) {
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
-  
-      ctx.globalCompositeOperation = 'destination-out'; // "erase" by painting transparency
+
+      ctx.globalCompositeOperation = 'destination-out';
       ctx.beginPath();
       ctx.arc(x, y, 1, 0, 2 * Math.PI);
       ctx.fill();
-      ctx.globalCompositeOperation = 'source-over'; // Reset back to default drawing mode
+      ctx.globalCompositeOperation = 'source-over';
       sendEraseAction(x, y, brushSize);
     }
-  
+
     canvas.addEventListener("mousedown", (e) => {
       erasing = true;
       erase(e);
     });
-  
-    canvas.addEventListener("mouseup", () => (erasing = false));
-    canvas.addEventListener("mouseleave", () => (erasing = false));
-    canvas.addEventListener("mousemove", throttle((e) => {
+
+    window.addEventListener("mouseup", () => (erasing = false));
+    window.addEventListener("mousemove", throttle((e) => {
       if (erasing) erase(e);
-    }, 50));
+    }, 16));
   }
   
   function sendPaintAction(x, y, brushSize, color) {
@@ -71,23 +68,13 @@ export function setupPaintBrush(ctx, brushSize = 1, color = [0, 0, 0]) {
     .catch((error) => console.error("Error sending erase action:", error));
   }
   
-  function throttle(func, limit) {
-    let lastFunc;
-    let lastRan;
+function throttle(func, limit) {
+    let lastRan = 0;
     return function () {
-      const context = this;
-      const args = arguments;
-      if (!lastRan) {
-        func.apply(context, args);
-        lastRan = Date.now();
-      } else {
-        clearTimeout(lastFunc);
-        lastFunc = setTimeout(function () {
-          if (Date.now() - lastRan >= limit) {
-            func.apply(context, args);
-            lastRan = Date.now();
-          }
-        }, limit - (Date.now() - lastRan));
+      const now = Date.now();
+      if (now - lastRan >= limit) {
+        lastRan = now;
+        func.apply(this, arguments);
       }
     };
   }

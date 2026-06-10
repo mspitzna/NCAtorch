@@ -15,6 +15,52 @@
   </svg>
   Controls
 </h2>
+
+<!-- Stroke Width -->
+<div class="mb-5">
+  <label for="brush-size-range" class="block mb-2 text-sm font-semibold text-slate-700 flex items-center gap-2">
+    <svg class="w-4 h-4 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M9 11l6-6 3 3-6 6H9v-3z"></path>
+    </svg>
+    Stroke Width: <span id="brush-size-value" class="font-bold text-cyan-600 ml-1">2</span>
+  </label>
+  <input id="brush-size-range" type="range" min="1" max="10" value="2" step="1"
+    class="w-full h-3 bg-gradient-to-r from-cyan-200 to-cyan-300 rounded-lg appearance-none cursor-pointer">
+  <div class="flex justify-between mt-1 text-xs text-slate-400 font-medium">
+    <span>1</span><span>5</span><span>10</span>
+  </div>
+</div>
+
+<!-- Class Color Legend -->
+<div>
+  <div class="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+    <svg class="w-4 h-4 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+    </svg>
+    Class Colors
+  </div>
+  <div class="grid grid-cols-5 gap-1.5">
+    {% set class_colors = [
+      (0, '128,0,0'),
+      (1, '230,25,75'),
+      (2, '70,240,240'),
+      (3, '210,245,60'),
+      (4, '250,190,190'),
+      (5, '170,110,40'),
+      (6, '170,255,195'),
+      (7, '165,163,159'),
+      (8, '0,128,128'),
+      (9, '128,128,0')
+    ] %}
+    {% for digit, rgb in class_colors %}
+    <div class="flex flex-col items-center gap-1">
+      <div class="w-8 h-8 rounded-lg shadow-sm border border-slate-200"
+           style="background-color: rgb({{ rgb }});"></div>
+      <span class="text-xs font-bold text-slate-600">{{ digit }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -23,6 +69,16 @@
 
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d');
-  setupPaintBrush(ctx, 5, [255, 255, 255]);
+
+  let currentBrushSize = 2;
+
+  const brushSizeRange = document.getElementById('brush-size-range');
+  const brushSizeValue = document.getElementById('brush-size-value');
+  brushSizeRange.addEventListener('input', (e) => {
+    currentBrushSize = parseInt(e.target.value, 10);
+    brushSizeValue.textContent = currentBrushSize;
+  });
+
+  setupPaintBrush(ctx, () => currentBrushSize, [255, 255, 255]);
 </script>
 {% endblock %}

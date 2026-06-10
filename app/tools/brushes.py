@@ -21,7 +21,7 @@ def delete_brush(img_canvas, img_tensor, action: dict, img_size: int):
     # Create a mask for the brush
     mask = Image.new("L", (img_size, img_size), 0)
     draw = ImageDraw.Draw(mask)
-    draw.ellipse(
+    draw.rectangle(
         (
             x - brush_size // 2,
             y - brush_size // 2,
@@ -67,7 +67,7 @@ def paint_brush(img_canvas, img_tensor, action: dict, img_size: int):
     # Create a mask for the brush
     mask = Image.new("L", (img_size, img_size), 0)
     draw = ImageDraw.Draw(mask)
-    draw.ellipse(
+    draw.rectangle(
         (
             x - brush_size // 2,
             y - brush_size // 2,
