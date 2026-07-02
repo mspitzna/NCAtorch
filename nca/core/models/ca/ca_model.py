@@ -14,10 +14,12 @@ class CAModel(nn.Module, ABC):
     """Core Neural Cellular Automata model.
 
     Each forward pass applies one CA update step:
+      0. Pre-perception noise — optional Gaussian noise injected directly into
+         the state, before perception (see ``NoiseInjection``).
       1. Perception  — neighbourhood operator maps state → gradient features.
       2. Update model — 1×1 network maps gradient features → state delta (dx).
-      3. State update pipeline — applies dx through noise injection, stochastic
-         fire-rate masking, living mask, and optional output clamping.
+      3. State update pipeline — applies dx through stochastic fire-rate
+         masking, living mask, and optional output clamping.
 
     The perception and update model are supplied at construction time via the
     factory functions in ``perception_factory`` and ``update_model_factory``,
@@ -163,6 +165,10 @@ class CAModel(nn.Module, ABC):
         else:
             state = x.clone()  # No channels are frozen
 
+        # 0) Pre-perception state noise (frozen channels are never noised)
+        state = self.state_updater.apply_pre(state)
+        x = torch.cat([frozen_layers, state], dim=1) if frozen_layers is not None else state
+
         # 1) Prepare the input
         x = self._prepare_input(x, cond)
 
@@ -180,7 +186,7 @@ class CAModel(nn.Module, ABC):
         if freeze_channels is not None and freeze_channels > 0:
             dx = dx[:, freeze_channels:]
 
-        # 4) Apply update pipeline (noise, fire-rate, add, living mask, clamp, etc.)
+        # 4) Apply update pipeline (fire-rate, add, living mask, clamp, etc.)
         state, dx = self.state_updater(
             state,
             dx,

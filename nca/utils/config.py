@@ -67,7 +67,10 @@ class ModelConfig(StrictModel):
             to the state before perception.
         LIVING_MASK: Zero out updates for cells below the alive threshold.
         LIVING_MASK_INDEX: Channel index used to determine cell liveness.
-        NOISE_INJECTION: Std of Gaussian noise added to ``dx`` each step.
+        NOISE_INJECTION: Std of Gaussian noise added directly to the state
+            before each step's perception (see ``NoiseInjection``). Applied on
+            every step, including the seed; never leaks into the final
+            output since the rollout simply stops after the last step.
         FINAL_ACTIVATION: Apply Tanh to the update model output.
         CLAMP_OUTPUT: Clamp state values to ``[-1, 1]`` after each step.
         FIRE_RATE: Fraction of cells updated per step (stochastic dropout).

@@ -18,6 +18,7 @@ MODEL:
   CHANNEL_N: 16                       # Number of CA state channels per cell
   USE_POSITIONAL_EMBEDDINGS: False    # Append learnable (x, y) coordinate channels to state
   LIVING_MASK: true                   # Zero out updates for cells below the alive threshold
+  NOISE_INJECTION: 0.01                # Standard deviation of Gaussian noise added to the state before each update
   CLAMP_OUTPUT: true                  # Clamp state values to [-1, 1] after each step
   FINAL_ACTIVATION: true              # Apply Tanh to the update model output
   PERCEPTIONS:

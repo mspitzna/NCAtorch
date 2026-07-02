@@ -28,6 +28,13 @@ class StateUpdatePipeline(StateUpdater):
         super().__init__()
         self.updaters = nn.ModuleList(list(updaters))
 
+    def apply_pre(self, state: torch.Tensor) -> torch.Tensor:
+        """Run stages that must see the state before perception (``NoiseInjection``)."""
+        for updater in self.updaters:
+            if isinstance(updater, NoiseInjection):
+                state, _ = updater(state)
+        return state
+
     def forward(
         self,
         state: torch.Tensor,
@@ -35,11 +42,25 @@ class StateUpdatePipeline(StateUpdater):
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         for updater in self.updaters:
+            if isinstance(updater, NoiseInjection):
+                continue
             state, dx = updater(state, dx, **kwargs)
         return state, dx
 
 
 class NoiseInjection(StateUpdater):
+    """Adds Gaussian noise directly to the state, once per CA step.
+
+    Invoked at the very top of ``CAModel.forward`` — before perception —
+    rather than through the post-``dx`` ``StateUpdatePipeline`` used by the
+    other stages below. That ordering matters: the corrupted state becomes
+    both what gets perceived and what ``dx`` is added onto this step, forcing
+    the model to correct real drift each step (useful for rollout stability).
+    It also means the final step's *output* is never noised — the rollout
+    loop simply stops after the last ``forward`` call, so there's no
+    following step left to precede with noise. No last-step exception needed.
+    """
+
     def __init__(self, sigma: float = 0.0):
         super().__init__()
         if sigma < 0:
@@ -49,11 +70,11 @@ class NoiseInjection(StateUpdater):
     def forward(
         self,
         state: torch.Tensor,
-        dx: torch.Tensor,
+        dx: torch.Tensor = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         if self.sigma > 0.0:
-            dx = dx + torch.randn_like(dx) * self.sigma
+            state = state + torch.randn_like(state) * self.sigma
         return state, dx
 
 

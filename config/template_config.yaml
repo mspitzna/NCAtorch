@@ -40,7 +40,7 @@ MODEL:
   USE_POSITIONAL_EMBEDDINGS: false  # Append learnable (x, y) coord channels to state
   LIVING_MASK: false                # Zero updates for cells below alive threshold
   LIVING_MASK_INDEX: 3              # Channel index used to determine liveness (0 ≤ index < CHANNEL_N)
-  NOISE_INJECTION: 0.0              # Std of Gaussian noise added to dx each step (0.0–1.0)
+  NOISE_INJECTION: 0.0              # Std of Gaussian noise added to the state before each step's perception (0.0–1.0)
   FINAL_ACTIVATION: false           # Apply Tanh to update model output
   CLAMP_OUTPUT: false               # Clamp state to [CLAMP_OUTPUT_MIN, CLAMP_OUTPUT_MAX] each step
   CLAMP_OUTPUT_MIN: -1.0
