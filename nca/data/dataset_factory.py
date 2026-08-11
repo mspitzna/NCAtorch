@@ -1,17 +1,22 @@
-from nca.utils.config import Config
-from nca.data.datasets import (
-    IconDataset,
-    EdgesDataset,
-    CustomMNISTDataset,
-    OrganizingTexturesDataset,
-    CIFAR10Dataset,
-    MovingMNISTDataset,
-    CelebADataset,
-    GrowingMNISTDataset,
-)
-from nca.data.data_wrapper import DataWrapper
-from nca.data.cfg_dataset_wrapper import CFGDatasetWrapper
+import random
+
+import numpy as np
+import torch
 from torch.utils.data import DataLoader
+
+from nca.data.cfg_dataset_wrapper import CFGDatasetWrapper
+from nca.data.data_wrapper import DataWrapper
+from nca.data.datasets import (
+    CelebADataset,
+    CIFAR10Dataset,
+    CustomMNISTDataset,
+    EdgesDataset,
+    GrowingMNISTDataset,
+    IconDataset,
+    MovingMNISTDataset,
+    OrganizingTexturesDataset,
+)
+from nca.utils.config import Config
 
 # Registry of all available datasets.
 #
@@ -150,15 +155,27 @@ def _create_celeba(config: Config, train: bool):
 
 
 DATASET_REGISTRY = {
-    "emoji":         _create_emoji,
-    "e2h":           _create_e2h,
-    "ot":            _create_ot,
-    "mnist":         _create_mnist,
-    "cifar10":       _create_cifar10,
+    "emoji": _create_emoji,
+    "e2h": _create_e2h,
+    "ot": _create_ot,
+    "mnist": _create_mnist,
+    "cifar10": _create_cifar10,
     "growing_mnist": _create_growing_mnist,
-    "moving_mnist":  _create_moving_mnist,
-    "celeba":        _create_celeba,
+    "moving_mnist": _create_moving_mnist,
+    "celeba": _create_celeba,
 }
+
+
+def _seed_worker(worker_id):
+    worker_seed = torch.initial_seed() % 2**32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
+
+
+def _worker_generator(config):
+    g = torch.Generator()
+    g.manual_seed(config.SEED if config.SEED != -1 else 0)
+    return g
 
 
 def create_dataset(config: Config, train=True):
@@ -186,6 +203,8 @@ def create_dataset(config: Config, train=True):
         num_workers=config.DATASET.NUM_WORKERS,
         pin_memory=True,
         drop_last=config.DATASET.DROP_LAST_BATCH if train else False,
+        worker_init_fn=_seed_worker,
+        generator=_worker_generator(config),
     )
     handler = DataWrapper(dataloader, config)
     return handler, cond_dim, im_height, im_width
