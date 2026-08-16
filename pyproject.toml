@@ -23,6 +23,7 @@ dependencies = [
     "datasets>=3.0",
     "plotly>=6.7.0",
     "pytest>=8.4.2",
+    "seaborn>=0.13.2",
 ]
 
 [project.scripts]
@@ -42,3 +43,16 @@ packages = ["nca", "scripts"]
 
 [tool.uv]
 torch-backend = "cu130"
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cu130", marker = "sys_platform == 'win32' or sys_platform == 'linux'" }
+]
+torchvision = [
+  { index = "pytorch-cu130", marker = "sys_platform == 'win32' or sys_platform == 'linux'" }
+]

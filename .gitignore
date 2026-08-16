@@ -215,4 +215,5 @@ train_log/*
 !train_log/ot_swirly_conv3x3
 !train_log/e2h_latent
 wandb/*
+test_log/*
 .claude/

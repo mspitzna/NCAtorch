@@ -13,11 +13,13 @@ from __future__ import annotations
 
 from nca.training.observers.base import LoggingObserver
 from nca.training.observers.iteration_stats import IterationStatsObserver
+from nca.training.observers.state_hist import StateHistogramObserver
 
 
 # key -> LoggingObserver subclass; instantiated as cls(**observer_cfg.PARAMS)
 LOGGING_OBSERVER_REGISTRY: dict[str, type[LoggingObserver]] = {
     "iteration_stats": IterationStatsObserver,
+    "state_histogram": StateHistogramObserver,
 }
 
 
