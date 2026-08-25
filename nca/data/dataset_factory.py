@@ -173,8 +173,10 @@ def _seed_worker(worker_id):
 
 
 def _worker_generator(config):
+    if config.SEED == -1:
+        return None
     g = torch.Generator()
-    g.manual_seed(config.SEED if config.SEED != -1 else 0)
+    g.manual_seed(config.SEED)
     return g
 
 
