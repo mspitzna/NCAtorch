@@ -488,12 +488,12 @@ class BaseTrainer(ABC):
         rep = self.config.REPRODUCIBILITY
         torch.use_deterministic_algorithms(rep.USE_DETERMINISTIC_ALGORITHMS)
         torch.backends.cudnn.benchmark = rep.CUDNN_BENCHMARK
-        if rep.CUBLAS_WORKSPACE_CONFIG:
+        if rep.CUBLAS_WORKSPACE_CONFIG is not None:
             if torch.cuda.is_initialized():
-                 warnings.warn(
-                     "CUBLAS_WORKSPACE_CONFIG should be set before CUDA initialization for deterministic cuBLAS results.",
-                     stacklevel=2,
-                 )
+                warnings.warn(
+                    "CUBLAS_WORKSPACE_CONFIG should be set before CUDA initialization for deterministic cuBLAS results.",
+                    stacklevel=2,
+                )
             os.environ["CUBLAS_WORKSPACE_CONFIG"] = rep.CUBLAS_WORKSPACE_CONFIG
 
     def _initialize_sample_pool(self, config: Config, device):
