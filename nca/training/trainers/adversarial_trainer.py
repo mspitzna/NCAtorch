@@ -146,7 +146,7 @@ class AdversarialTrainer(BaseTrainer):
                 scale_before = self.d_scaler.get_scale()
                 self.d_scaler.scale(d_loss).backward()
                 self.d_scaler.unscale_(self.d_optimizer)
-                torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=self.config.TRAINING.GRADIENT_CLIPPING_NORM)
+                self._clip_gradients(self.critic.parameters())
                 self.d_scaler.step(self.d_optimizer)
                 self.d_scaler.update()
                 scale_after = self.d_scaler.get_scale()
@@ -154,7 +154,7 @@ class AdversarialTrainer(BaseTrainer):
                 d_optimizer_step_ran = scale_after >= scale_before
             else:
                 d_loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=self.config.TRAINING.GRADIENT_CLIPPING_NORM)
+                self._clip_gradients(self.critic.parameters())
                 self.d_optimizer.step()
                 d_optimizer_step_ran = True
             

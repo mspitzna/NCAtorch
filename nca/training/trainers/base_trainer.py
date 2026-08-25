@@ -205,6 +205,13 @@ class BaseTrainer(ABC):
         self.lr_scheduler = create_scheduler(self.optimizer, self.config)
         print(f"Using LR schedule: {self.config.TRAINING.LR_SCHEDULE_MODE}")
 
+    def _clip_gradients(self, parameters):
+        """Clip gradients when a positive clipping norm is configured."""
+        max_norm = self.config.TRAINING.GRADIENT_CLIPPING_NORM
+        if max_norm > 0:
+            return torch.nn.utils.clip_grad_norm_(parameters, max_norm=max_norm)
+        return None
+
     def _evolve(
         self,
         state_in,
@@ -360,20 +367,14 @@ class BaseTrainer(ABC):
                         scale_before = self.scaler.get_scale()
                         # Unscale gradients before clipping
                         self.scaler.unscale_(self.optimizer)
-                        torch.nn.utils.clip_grad_norm_(
-                            self.ca_model.parameters(),
-                            max_norm=self.config.TRAINING.GRADIENT_CLIPPING_NORM,
-                        )
+                        self._clip_gradients(self.ca_model.parameters())
                         self.scaler.step(self.optimizer)
                         self.scaler.update()
                         scale_after = self.scaler.get_scale()
                         # GradScaler lowers the scale when it skips the optimizer step (overflow).
                         optimizer_step_ran = scale_after >= scale_before
                     else:
-                        torch.nn.utils.clip_grad_norm_(
-                            self.ca_model.parameters(),
-                            max_norm=self.config.TRAINING.GRADIENT_CLIPPING_NORM,
-                        )
+                        self._clip_gradients(self.ca_model.parameters())
                         self.optimizer.step()
                         optimizer_step_ran = True
 
