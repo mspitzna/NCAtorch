@@ -59,6 +59,9 @@ class ModelConfig(StrictModel):
     """Configuration for the CA model architecture.
 
     Attributes:
+        ARCHITECTURE: CA step architecture — ``residual`` (state + step_size *
+            dx, the default). Valid values are the keys of
+            ``MODEL_REGISTRY``.
         NAME: Update model architecture — ``MLP`` or ``ResNet``.
             Valid values are the keys of ``UPDATE_MODEL_REGISTRY``.
         HIDDEN_CHANNELS: Hidden layer sizes in the update model.
@@ -79,7 +82,7 @@ class ModelConfig(StrictModel):
         RESNET_BLOCKS: Number of residual blocks (``ResNet`` only).
         PERCEPTIONS: List of perception branch configs; outputs are concatenated.
     """
-
+    ARCHITECTURE: str = "residual"
     NAME: str = "MLP"
     HIDDEN_CHANNELS: list[int] = [64]
     CHANNEL_N: int = 16
@@ -99,6 +102,14 @@ class ModelConfig(StrictModel):
     PERCEPTIONS: list[PerceptionConfig] = Field(
         default_factory=lambda: [PerceptionConfig()]
     )
+
+    @field_validator("ARCHITECTURE")
+    @classmethod
+    def check_architecture(cls, value):
+        from nca.core.models.model_factory import MODEL_REGISTRY
+        if value not in MODEL_REGISTRY:
+            raise ValueError(f"MODEL.ARCHITECTURE must be one of {sorted(MODEL_REGISTRY)}.")
+        return value
 
     @field_validator("CHANNEL_N")
     @classmethod

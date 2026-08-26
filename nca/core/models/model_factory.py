@@ -26,7 +26,7 @@ def compile_model(model: torch.nn.Module, config: Config) -> torch.nn.Module:
     return torch.compile(model, mode=tc.MODE)
 
 
-def create_model(config: Config, cond_dim, img_height, img_width):
+def create_residual_model(config: Config, cond_dim, img_height, img_width):
     device = config.DEVICE
 
     def get_img_dims(height, width, compression):
@@ -74,5 +74,33 @@ def get_state_update_pipeline(config: Config, device) -> StateUpdatePipeline:
         pipeline.append(ClampOutput(config.MODEL.CLAMP_OUTPUT_MIN, config.MODEL.CLAMP_OUTPUT_MAX))
 
     return StateUpdatePipeline(pipeline)
+
+
+
+# Registry of all available CA step architectures.
+#
+# Maps MODEL.ARCHITECTURE to a factory function with signature:
+#   (config: Config, cond_dim, img_height, img_width) -> nn.Module
+#
+# Adding a new architecture:
+#   1. Implement the model (and its factory) in nca/core/models/, e.g. a
+#      sibling module like coupling_model_factory.py.
+#   2. Add one entry here.
+#   3. Set MODEL.ARCHITECTURE in the YAML config.
+#
+# Available architectures:
+#   "residual"  — state + step_size * dx (the default; CAModel)
+MODEL_REGISTRY = {
+    "residual": create_residual_model,
+}
+
+
+def create_model(config: Config, cond_dim, img_height, img_width):
+    architecture = config.MODEL.ARCHITECTURE
+    if architecture not in MODEL_REGISTRY:
+        raise ValueError(
+            f"Invalid MODEL.ARCHITECTURE '{architecture}'. Valid options: {sorted(MODEL_REGISTRY)}"
+        )
+    return MODEL_REGISTRY[architecture](config, cond_dim, img_height, img_width)
 
 
