@@ -1,8 +1,11 @@
 # train.py
+import argparse
 import os
 import sys
-import argparse
 import time
+
+import numpy as np
+import torch
 import yaml
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
@@ -15,9 +18,7 @@ from nca.utils.config import load_config
 def parse_args():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Train Cellular Automata Model")
-    parser.add_argument(
-        "--config", type=str, help="Path to the configuration file"
-    )
+    parser.add_argument("--config", type=str, help="Path to the configuration file")
     parser.add_argument(
         "--retries",
         type=int,
@@ -29,19 +30,21 @@ def parse_args():
     )
     parser.add_argument(
         "--folder",
-        type=str, default=None,
-        help="Path to the folder containing training data"
+        type=str,
+        default=None,
+        help="Path to the folder containing training data",
     )
     parser.add_argument(
         "--sweep",
         action="store_true",
-        help="Enable wandb sweep mode: init wandb early and apply wandb.config overrides."
+        help="Enable wandb sweep mode: init wandb early and apply wandb.config overrides.",
     )
     parser.add_argument(
-        "-o", "--override",
+        "-o",
+        "--override",
         action="append",
         default=[],
-        help="Override config values with dot-path syntax, e.g. TRAINING.LEARNING_RATE=0.001"
+        help="Override config values with dot-path syntax, e.g. TRAINING.LEARNING_RATE=0.001",
     )
 
     return parser.parse_args()
@@ -107,6 +110,17 @@ def parse_override_strings(override_items):
     return parsed
 
 
+def setup_seed(seed):
+    """Set random seed for reproducibility."""
+    if seed != -1:
+        import random
+
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        random.seed(seed)
+        print(f"Setting random seed to {seed}")
+
+
 def main():
     # Parse arguments and load config
     args = parse_args()
@@ -120,7 +134,11 @@ def main():
         print(f"Loading config from folder: {args.folder}")
         config = load_config(f"{args.folder}/config.yaml")
         config = config.model_copy(
-            update={"LOGGING": config.LOGGING.model_copy(update={"FOLDER_NAME": args.folder})}
+            update={
+                "LOGGING": config.LOGGING.model_copy(
+                    update={"FOLDER_NAME": args.folder}
+                )
+            }
         )
     else:
         # If no folder is specified, load config from the provided path
@@ -142,6 +160,7 @@ def main():
     use_sweep = args.sweep or os.environ.get("WANDB_SWEEP") == "1"
     if use_sweep:
         import wandb
+
         # Ensure wandb logging is on for sweeps
         if not config.LOGGING.WANDB:
             config = config.model_copy(
@@ -158,6 +177,9 @@ def main():
         sweep_cfg = {k: v for k, v in sweep_cfg.items() if not str(k).startswith("_")}
         sweep_overrides = _flatten_dict(sweep_cfg)
         config = apply_overrides(config, sweep_overrides)
+
+    # set seed, needs to happen before dataloader and model creation!
+    setup_seed(config.SEED)
 
     # Prepare dataset
     dataloader, cond_dim, im_height, im_width = create_dataset(config)
@@ -177,11 +199,13 @@ def main():
         trainer = create_trainer(config, ca_model, dataloader, str(args.config))
         result = trainer.train()
         if result == -1:
-            print(f"[Attempt {attempt+1}/{args.retries+1}] Training returned -1, retrying...")
+            print(
+                f"[Attempt {attempt + 1}/{args.retries + 1}] Training returned -1, retrying..."
+            )
             # sleep for 5 seconds before retrying
             time.sleep(5)
         else:
-            print(f"[Attempt {attempt+1}] Training succeeded! Exiting script.")
+            print(f"[Attempt {attempt + 1}] Training succeeded! Exiting script.")
             sys.exit(0)
 
     # If we exhaust all attempts and always got -1, exit with nonzero code

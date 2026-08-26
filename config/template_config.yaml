@@ -201,3 +201,13 @@ TORCH_COMPILE:
                              # CUDA-graph modes (reduce-overhead, max-autotune) are
                              # incompatible with the iterative NCA forward loop.
   DEBUG: false               # Enable torch._inductor debug output
+
+
+# -----------------------------------------------------------------------------
+# REPRODUCIBILITY — bit-exact deterministic training (unlike SEED, controls
+# whether PyTorch/CUDA may pick non-deterministic kernels)
+# -----------------------------------------------------------------------------
+REPRODUCIBILITY:
+  USE_DETERMINISTIC_ALGORITHMS: false # Call torch.use_deterministic_algorithms; true raises on non-deterministic kernels
+  CUDNN_BENCHMARK: false              # Set torch.backends.cudnn.benchmark
+  CUBLAS_WORKSPACE_CONFIG: null       # cuBLAS workspace env var for deterministic results, e.g. ":4096:8"; null = leave untouched

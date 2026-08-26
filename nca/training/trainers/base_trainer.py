@@ -1,19 +1,20 @@
 # trainers/trainer.py
 import os
 import warnings
-import torch
-import numpy as np
-import torch.optim as optim
 from abc import ABC, abstractmethod
+
+import numpy as np
+import torch
+from torch import optim
 from tqdm import tqdm
-from nca.utils.config import Config
-from nca.utils.visualization import save_image
+
+from nca.core.models.latent_wrapper import LatentWrapper
+from nca.training.evolve_factory import create_evolver
+from nca.training.logger import Logger
+from nca.training.observers import create_logging_observers
 from nca.training.sample_pool import SamplePool, TimeseriesSamplePool
 from nca.training.training_utils import create_scheduler, export_model
-from nca.training.logger import Logger
-from nca.training.evolve_factory import create_evolver
-from nca.training.observers import create_logging_observers
-from nca.core.models.latent_wrapper import LatentWrapper
+from nca.utils.config import Config
 
 
 class BaseTrainer(ABC):
@@ -64,6 +65,7 @@ class BaseTrainer(ABC):
         self.loss_fn = loss_fn
         self.use_latent = use_latent
         self.setup_seed(self.config.SEED)
+        self._setup_reproducibility()
         self.steps = self.config.TRAINING.STEPS
         self.log_interval = self.config.LOGGING.LOG_INTERVAL
         self.save_interval = self.config.LOGGING.SAVE_INTERVAL
@@ -82,9 +84,7 @@ class BaseTrainer(ABC):
         self.output_folder = self.logger.get_output_folder()
         self._interval_metric_buffer = {}
 
-        self.intermediate_logging_steps = (
-            self.config.LOGGING.INTERMEDIATE_LOGGING_STEPS
-        )
+        self.intermediate_logging_steps = self.config.LOGGING.INTERMEDIATE_LOGGING_STEPS
         self.evolver = create_evolver(config)
 
         # Config-driven diagnostic logging observers (see nca.training.observers).
@@ -101,9 +101,9 @@ class BaseTrainer(ABC):
             self.logging_observers = []
 
         # Ensure CA model is initialized
-        assert (
-            self.ca_model is not None
-        ), "CA model is not initialized. Please initialize the CA model before proceeding."
+        assert self.ca_model is not None, (
+            "CA model is not initialized. Please initialize the CA model before proceeding."
+        )
 
         if self.use_latent:
             # Ensure LatentWrapper is initialized ONLY if use_latent is True
@@ -124,19 +124,19 @@ class BaseTrainer(ABC):
     @abstractmethod
     def _initialize_additional_components(self):
         """Hook for child classes to add extra modules (like AE, Discriminator, etc.)."""
-        pass
 
     def _on_step_end(self, step: int):
         """Hook called at the end of each training step. Override in subclasses."""
-        pass
 
     def _on_train_end(self):
         """Hook called at the end of training. Override in subclasses."""
-        pass
 
     def _to_device(self, *tensors):
         """Move tensors to the training device, passing None through unchanged."""
-        return [t.to(self.device, non_blocking=True) if t is not None else None for t in tensors]
+        return [
+            t.to(self.device, non_blocking=True) if t is not None else None
+            for t in tensors
+        ]
 
     def _compute_losses(self, initial_state, cond, target, logging=False):
         """Forward pass and loss computation.
@@ -175,7 +175,9 @@ class BaseTrainer(ABC):
         directly only when you need full control (e.g. multi-optimizer GAN
         training with separate scalers).
         """
-        with torch.amp.autocast(device_type=self.device, enabled=self.config.TRAINING.MIXED_PRECISION):
+        with torch.amp.autocast(
+            device_type=self.device, enabled=self.config.TRAINING.MIXED_PRECISION
+        ):
             prediction_image, final_state, loss_dict = self._compute_losses(
                 initial_state, cond, target, logging=logging
             )
@@ -193,7 +195,6 @@ class BaseTrainer(ABC):
             self.logger.add_metrics(loss_dict)
         return prediction_image.detach(), final_state.detach()
 
-
     def _initialize_base_optimizers(self):
         """Initialize models, optimizers, and schedulers."""
         self.optimizer = optim.Adam(
@@ -203,6 +204,13 @@ class BaseTrainer(ABC):
         )
         self.lr_scheduler = create_scheduler(self.optimizer, self.config)
         print(f"Using LR schedule: {self.config.TRAINING.LR_SCHEDULE_MODE}")
+
+    def _clip_gradients(self, parameters):
+        """Clip gradients when a positive clipping norm is configured."""
+        max_norm = self.config.TRAINING.GRADIENT_CLIPPING_NORM
+        if max_norm > 0:
+            return torch.nn.utils.clip_grad_norm_(parameters, max_norm=max_norm)
+        return None
 
     def _evolve(
         self,
@@ -340,7 +348,10 @@ class BaseTrainer(ABC):
                 if (i + 1) % self.log_interval == 0:
                     if self.use_latent:
                         self.add_img_logs(
-                            self.latent_wrapper.decode(state0), prediction_image, target, cond
+                            self.latent_wrapper.decode(state0),
+                            prediction_image,
+                            target,
+                            cond,
                         )
                     else:
                         self.add_img_logs(state0, prediction_image, target, cond)
@@ -356,20 +367,14 @@ class BaseTrainer(ABC):
                         scale_before = self.scaler.get_scale()
                         # Unscale gradients before clipping
                         self.scaler.unscale_(self.optimizer)
-                        torch.nn.utils.clip_grad_norm_(
-                            self.ca_model.parameters(),
-                            max_norm=self.config.TRAINING.GRADIENT_CLIPPING_NORM,
-                        )
+                        self._clip_gradients(self.ca_model.parameters())
                         self.scaler.step(self.optimizer)
                         self.scaler.update()
                         scale_after = self.scaler.get_scale()
                         # GradScaler lowers the scale when it skips the optimizer step (overflow).
                         optimizer_step_ran = scale_after >= scale_before
                     else:
-                        torch.nn.utils.clip_grad_norm_(
-                            self.ca_model.parameters(),
-                            max_norm=self.config.TRAINING.GRADIENT_CLIPPING_NORM,
-                        )
+                        self._clip_gradients(self.ca_model.parameters())
                         self.optimizer.step()
                         optimizer_step_ran = True
 
@@ -395,7 +400,9 @@ class BaseTrainer(ABC):
 
                 # Logging and visualization
                 if (i + 1) % self.log_interval == 0:
-                    self.commit_logs(i, is_logging_step=True, silent=self.logger.use_wandb)
+                    self.commit_logs(
+                        i, is_logging_step=True, silent=self.logger.use_wandb
+                    )
                 else:
                     self.commit_logs(i, silent=True)
 
@@ -472,6 +479,23 @@ class BaseTrainer(ABC):
             np.random.seed(seed)
             print(f"Setting random seed to {seed}")
 
+    def _setup_reproducibility(self):
+        """Apply deterministic-algorithm settings from REPRODUCIBILITY config.
+
+        See https://docs.pytorch.org/docs/2.13/notes/randomness.html and
+        https://docs.nvidia.com/cuda/cublas/index.html#results-reproducibility
+        """
+        rep = self.config.REPRODUCIBILITY
+        torch.use_deterministic_algorithms(rep.USE_DETERMINISTIC_ALGORITHMS)
+        torch.backends.cudnn.benchmark = rep.CUDNN_BENCHMARK
+        if rep.CUBLAS_WORKSPACE_CONFIG is not None:
+            if torch.cuda.is_initialized():
+                warnings.warn(
+                    "CUBLAS_WORKSPACE_CONFIG should be set before CUDA initialization for deterministic cuBLAS results.",
+                    stacklevel=2,
+                )
+            os.environ["CUBLAS_WORKSPACE_CONFIG"] = rep.CUBLAS_WORKSPACE_CONFIG
+
     def _initialize_sample_pool(self, config: Config, device):
         """Initialize the sample pool if pooling is enabled."""
         if config.PATTERN_POOL.ENABLED:
@@ -531,7 +555,7 @@ class BaseTrainer(ABC):
 
     def add_img_logs(self, x0, x, target, cond=None):
         dataset = self.dataloader.get_dataset()
-        if hasattr(dataset, 'batch_to_rgb'):
+        if hasattr(dataset, "batch_to_rgb"):
             if not self.use_latent:
                 for key, val in self.logger.get_state_logs().items():
                     _, val_vis, _ = dataset.batch_to_rgb(x0, val, target, cond)
