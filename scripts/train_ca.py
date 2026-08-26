@@ -113,8 +113,11 @@ def parse_override_strings(override_items):
 def setup_seed(seed):
     """Set random seed for reproducibility."""
     if seed != -1:
+        import random
+
         torch.manual_seed(seed)
         np.random.seed(seed)
+        random.seed(seed)
         print(f"Setting random seed to {seed}")
 
 
