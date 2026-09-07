@@ -166,7 +166,7 @@ class TrainingConfig(StrictModel):
         WARMUP_STEPS: Linear LR warm-up duration.
         LR_SCHEDULE_MODE: LR schedule — ``step``, ``cosine``, or ``constant``.
         ITER_N_MIN: Minimum CA rollout steps per batch.
-        ITER_N_MAX: Maximum CA rollout steps per batch (sampled uniformly).
+        ITER_N_MAX: Inclusive maximum CA rollout steps per batch (sampled uniformly).
         GRADIENT_CLIPPING_NORM: Max gradient norm; set to ``0`` to disable.
         MIXED_PRECISION: Enable automatic mixed precision (AMP).
         LPIPS_NET: Backbone for LPIPS loss — ``alex``, ``vgg``, or ``squeeze``.

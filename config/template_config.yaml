@@ -88,7 +88,7 @@ TRAINING:
   WSD_MIN_LR_RATIO: 0.0      # Final LR as a fraction of peak LR
 
   ITER_N_MIN: 32             # Minimum CA rollout steps per batch
-  ITER_N_MAX: 64             # Maximum CA rollout steps per batch (sampled uniformly)
+  ITER_N_MAX: 64             # Inclusive maximum CA rollout steps per batch (sampled uniformly)
 
   GRADIENT_CLIPPING_NORM: 1.0         # Max gradient norm; 0 = disabled
   GRADIENT_CHECKPOINTING: false       # Trade compute for memory via activation checkpointing

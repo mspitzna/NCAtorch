@@ -26,7 +26,8 @@ def parse_args():
         help="Number of times to retry training if `trainer.train()` returns -1.",
     )
     parser.add_argument(
-        "--device", type=str, default="cuda", help="Device to use for training"
+        "--device", type=str, default=None,
+        help="Override DEVICE from the config (otherwise use the configured device)",
     )
     parser.add_argument(
         "--folder",
@@ -152,8 +153,8 @@ def main():
     cli_overrides = parse_override_strings(args.override)
     config = apply_overrides(config, cli_overrides)
 
-    # if device is set per args, update config
-    if args.device:
+    # Only an explicit --device overrides the configured device.
+    if args.device is not None:
         config = config.model_copy(update={"DEVICE": args.device})
 
     # If running a wandb sweep, init wandb early and apply sweep overrides

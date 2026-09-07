@@ -542,13 +542,13 @@ class BaseTrainer(ABC):
         self.ca_model.train()
 
     def get_iter_range(self):
-        """Get the range of iterations."""
+        """Sample a rollout length uniformly between the inclusive configured bounds."""
         if self.config.TRAINING.ITER_N_MIN == self.config.TRAINING.ITER_N_MAX:
             # Fixed iteration number
             iter_n = self.config.TRAINING.ITER_N_MIN
         else:
             iter_n = torch.randint(
-                self.config.TRAINING.ITER_N_MIN, self.config.TRAINING.ITER_N_MAX, (1,)
+                self.config.TRAINING.ITER_N_MIN, self.config.TRAINING.ITER_N_MAX + 1, (1,)
             ).item()
 
         return iter_n
