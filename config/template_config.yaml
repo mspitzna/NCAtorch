@@ -7,6 +7,11 @@
 SEED: -1                     # Random seed; -1 = no fixed seed
 DEVICE: "cuda"               # e.g. "cuda" | "cpu"
 
+# Runtime metadata populated from the dataset by train_ca.py.
+COND_DIM: null
+IM_HEIGHT: null
+IM_WIDTH: null
+
 # -----------------------------------------------------------------------------
 # LOGGING — run identity, W&B, output folder and logging/checkpoint intervals
 # -----------------------------------------------------------------------------
@@ -32,6 +37,7 @@ LOGGING:
 # MODEL — CA architecture
 # -----------------------------------------------------------------------------
 MODEL:
+  ARCHITECTURE: "residual"   # CA step architecture (MODEL_REGISTRY key)
   NAME: "MLP"                # Update model: "MLP" | "ResNet"
   HIDDEN_CHANNELS: [64]      # Hidden layer widths, e.g. [128] or [128, 64]
   CHANNEL_N: 16              # CA state channels per cell (must be > 0)
@@ -69,7 +75,7 @@ MODEL:
 # -----------------------------------------------------------------------------
 TRAINING:
   BATCH_SIZE: 12             # Grids per training batch (must be > 0)
-  STEPS: 10000               # Total training batches, including critic-only batches
+  STEPS: 10000               # Total training batches, including critic-only batches (must be > 0)
 
   LOSS_FN: "mse"             # LOSS_FN_REGISTRY key: "mse" | "l1" | "lpips" | "vgg" | "p_ce" | "i_ce" | "overflow"
   OVERFLOW_LOSS: false       # Add overflow penalty to the loss
@@ -122,6 +128,26 @@ DATASET:
   DATASET_SAMPLE_PATH: null  # Path to a single sample image
 
   DROP_LAST_BATCH: true
+
+  # Moving MNIST history window
+  HISTORY_N: 1              # Number of seed frames
+  REVERSE_HISTORY_SEED: false # Current behavior: false = newest first; true = chronological
+
+  # Growing MNIST seed and augmentation settings
+  SEED_SIZE: 1              # Central seed square spans 2 * floor(SEED_SIZE / 2) + 1 pixels
+  ENABLE_ROTATION: false
+  ENABLE_ZOOM: false
+  Z_LATENT_NOISE_CHANNEL: false # Legacy flag; currently has no effect on generated samples
+
+# -----------------------------------------------------------------------------
+# CFG — classifier-free guidance training
+# -----------------------------------------------------------------------------
+CFG:
+  ENABLED: false
+  DROPOUT_PROB: 0.1         # Probability of replacing a condition with the null condition
+  NULL_CONDITION_TYPE: "zeros" # "zeros" | "learned" (currently also falls back to zeros)
+  GOAL_CHANNELS: false      # Use blurred targets as conditions for Growing MNIST
+  PRESERVE_CHANNELS: []     # Condition channel indices excluded from dropout
 
 # -----------------------------------------------------------------------------
 # PATTERN_POOL — persistent sample pool for continual / damage training

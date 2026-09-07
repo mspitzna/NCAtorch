@@ -27,6 +27,7 @@ def test_group_norm_channels_must_be_divisible(encoder_type):
 
 
 @pytest.mark.parametrize("section, field, value", [
+    *[("TRAINING", "STEPS", value) for value in (-2, -1, 0)],
     ("TRAINING", "WARMUP_STEPS", -1),
     ("ADVERSARIAL", "D_WARMUP_STEPS", -1),
     ("LATENT_TRAINING", "LATENT_AE_WARMUP_STEPS", -1),
@@ -200,10 +201,10 @@ def test_nullable_values_and_full_config_round_trip():
 
 
 def test_supported_sentinels_and_empty_optional_lists():
-    assert TrainingConfig(STEPS=-1).STEPS == -1
+    assert TrainingConfig(STEPS=1).STEPS == 1
     for seed in (-1, 0, 2**32 - 1):
         Config(SEED=seed, DATASET={"EMOJIS": ["x"]})
-    for steps in (-2, 0):
+    for steps in (-2, -1, 0):
         with pytest.raises(ValidationError):
             TrainingConfig(STEPS=steps)
     ModelConfig(NAME="MLP", HIDDEN_CHANNELS=[])

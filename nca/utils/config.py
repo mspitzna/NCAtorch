@@ -191,8 +191,7 @@ class TrainingConfig(StrictModel):
     """
 
     BATCH_SIZE: int = Field(default=12, gt=0)
-    # -1 is the existing infinite-dataloader sentinel.
-    STEPS: Annotated[int, Field(gt=0)] | Literal[-1] = 10000
+    STEPS: int = Field(default=10000, gt=0)
     LOSS_FN: str = "mse"
     OVERFLOW_LOSS: bool = False
     LEARNING_RATE: float = Field(default=0.002, gt=0, le=1)
