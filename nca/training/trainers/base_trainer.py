@@ -205,6 +205,42 @@ class BaseTrainer(ABC):
         self.lr_scheduler = create_scheduler(self.optimizer, self.config)
         print(f"Using LR schedule: {self.config.TRAINING.LR_SCHEDULE_MODE}")
 
+    def _should_train_generator(self, step: int) -> bool:
+        """Whether this batch contributes gradients to the main optimizer."""
+        return True
+
+    def _step_generator(self, accumulated_steps: int, completed_batches: int) -> bool:
+        """Apply an averaged gradient group, including a short final group."""
+        parameters = list(self.ca_model.parameters())
+        use_scaler = self.config.TRAINING.MIXED_PRECISION and self.scaler is not None
+        if use_scaler:
+            scale_before = self.scaler.get_scale()
+            self.scaler.unscale_(self.optimizer)
+
+        # Each backward used 1 / accumulation_steps. Correct the final partial group.
+        if accumulated_steps != self.accumulation_steps:
+            correction = self.accumulation_steps / accumulated_steps
+            for parameter in parameters:
+                if parameter.grad is not None:
+                    parameter.grad.mul_(correction)
+        self._clip_gradients(parameters)
+
+        if use_scaler:
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+            optimizer_step_ran = self.scaler.get_scale() >= scale_before
+        else:
+            self.optimizer.step()
+            optimizer_step_ran = True
+
+        self.optimizer.zero_grad()
+        if self.lr_scheduler is not None and optimizer_step_ran:
+            # Schedule durations use training batches, even with accumulation.
+            while self.lr_scheduler.last_epoch < completed_batches:
+                self.lr_scheduler.step()
+            self.logger.add_metric("lr", self.optimizer.param_groups[0]["lr"])
+        return optimizer_step_ran
+
     def _clip_gradients(self, parameters):
         """Clip gradients when a positive clipping norm is configured."""
         max_norm = self.config.TRAINING.GRADIENT_CLIPPING_NORM
@@ -306,6 +342,7 @@ class BaseTrainer(ABC):
         try:
             self.current_step = 0  # Initialize current step counter
             accumulated_steps = 0  # Track gradient accumulation
+            self.optimizer.zero_grad()
             for i in tqdm(range(self.steps), desc="Training", mininterval=1):
                 try:
                     seed, cond, target = next(self.data_iter)
@@ -357,34 +394,15 @@ class BaseTrainer(ABC):
                         self.add_img_logs(state0, prediction_image, target, cond)
 
                 # Update gradient accumulation counter
-                accumulated_steps += 1
+                if self._should_train_generator(i):
+                    accumulated_steps += 1
 
                 # --- Optimizer Step / LR Scheduling / Grad Accumulation ---
-                if accumulated_steps % self.accumulation_steps == 0:
-                    # Gradient clipping and optimizer step
-                    optimizer_step_ran = True
-                    if self.config.TRAINING.MIXED_PRECISION and self.scaler is not None:
-                        scale_before = self.scaler.get_scale()
-                        # Unscale gradients before clipping
-                        self.scaler.unscale_(self.optimizer)
-                        self._clip_gradients(self.ca_model.parameters())
-                        self.scaler.step(self.optimizer)
-                        self.scaler.update()
-                        scale_after = self.scaler.get_scale()
-                        # GradScaler lowers the scale when it skips the optimizer step (overflow).
-                        optimizer_step_ran = scale_after >= scale_before
-                    else:
-                        self._clip_gradients(self.ca_model.parameters())
-                        self.optimizer.step()
-                        optimizer_step_ran = True
-
-                    self.optimizer.zero_grad()
-                    accumulated_steps = 0  # Reset accumulation counter
-                    if self.lr_scheduler is not None and optimizer_step_ran:
-                        self.lr_scheduler.step()  # Step scheduler after optimizer
-                        self.logger.add_metric(
-                            "lr", self.optimizer.param_groups[0]["lr"]
-                        )
+                if accumulated_steps and (
+                    accumulated_steps == self.accumulation_steps or i + 1 == self.steps
+                ):
+                    self._step_generator(accumulated_steps, i + 1)
+                    accumulated_steps = 0
 
                 # --- Commit to Pool ---
                 if self.pool:
@@ -542,13 +560,13 @@ class BaseTrainer(ABC):
         self.ca_model.train()
 
     def get_iter_range(self):
-        """Get the range of iterations."""
+        """Sample a rollout length uniformly between the inclusive configured bounds."""
         if self.config.TRAINING.ITER_N_MIN == self.config.TRAINING.ITER_N_MAX:
             # Fixed iteration number
             iter_n = self.config.TRAINING.ITER_N_MIN
         else:
             iter_n = torch.randint(
-                self.config.TRAINING.ITER_N_MIN, self.config.TRAINING.ITER_N_MAX, (1,)
+                self.config.TRAINING.ITER_N_MIN, self.config.TRAINING.ITER_N_MAX + 1, (1,)
             ).item()
 
         return iter_n

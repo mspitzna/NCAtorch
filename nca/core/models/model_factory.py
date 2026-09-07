@@ -29,15 +29,9 @@ def compile_model(model: torch.nn.Module, config: Config) -> torch.nn.Module:
 def create_residual_model(config: Config, cond_dim, img_height, img_width):
     device = config.DEVICE
 
-    def get_img_dims(height, width, compression):
-        factor = pow(2, compression)
-        return int(height / factor), int(width / factor)
-
     if config.LATENT_TRAINING.ENABLED:
         channel_out = config.LATENT_TRAINING.LATENT_AE_CHANNEL
-        img_height, img_width = get_img_dims(
-            img_height, img_width, config.LATENT_TRAINING.LATENT_AE_COMPRESSION
-        )
+        img_height, img_width = config.LATENT_TRAINING.get_latent_shape(img_height, img_width)
     else:
         channel_out = config.MODEL.CHANNEL_OUT
 
@@ -102,5 +96,4 @@ def create_model(config: Config, cond_dim, img_height, img_width):
             f"Invalid MODEL.ARCHITECTURE '{architecture}'. Valid options: {sorted(MODEL_REGISTRY)}"
         )
     return MODEL_REGISTRY[architecture](config, cond_dim, img_height, img_width)
-
 

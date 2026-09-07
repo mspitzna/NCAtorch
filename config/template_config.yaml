@@ -7,6 +7,11 @@
 SEED: -1                     # Random seed; -1 = no fixed seed
 DEVICE: "cuda"               # e.g. "cuda" | "cpu"
 
+# Runtime metadata populated from the dataset by train_ca.py.
+COND_DIM: null
+IM_HEIGHT: null
+IM_WIDTH: null
+
 # -----------------------------------------------------------------------------
 # LOGGING — run identity, W&B, output folder and logging/checkpoint intervals
 # -----------------------------------------------------------------------------
@@ -32,6 +37,7 @@ LOGGING:
 # MODEL — CA architecture
 # -----------------------------------------------------------------------------
 MODEL:
+  ARCHITECTURE: "residual"   # CA step architecture (MODEL_REGISTRY key)
   NAME: "MLP"                # Update model: "MLP" | "ResNet"
   HIDDEN_CHANNELS: [64]      # Hidden layer widths, e.g. [128] or [128, 64]
   CHANNEL_N: 16              # CA state channels per cell (must be > 0)
@@ -68,32 +74,32 @@ MODEL:
 # TRAINING — optimiser and rollout hyperparameters
 # -----------------------------------------------------------------------------
 TRAINING:
-  BATCH_SIZE: 12             # Grids per optimisation step (must be > 0)
-  STEPS: 10000               # Total training steps
+  BATCH_SIZE: 12             # Grids per training batch (must be > 0)
+  STEPS: 10000               # Total training batches, including critic-only batches (must be > 0)
 
-  LOSS_FN: "mse"             # "mse" | "l1" | "lpips" | "vggstyle" | "p_ce" | "i_ce" | "overflow"
+  LOSS_FN: "mse"             # LOSS_FN_REGISTRY key: "mse" | "l1" | "lpips" | "vgg" | "p_ce" | "i_ce" | "overflow"
   OVERFLOW_LOSS: false       # Add overflow penalty to the loss
-  OVERFLOW_WEIGHT: 1.0       # Weight for the overflow penalty term
+  OVERFLOW_WEIGHT: 1.0       # Nonnegative overflow penalty weight (mse, l1, vgg, i_ce, overflow; AE/VQVAE reconstruction)
 
   LEARNING_RATE: 0.002       # Peak learning rate (0 < lr ≤ 1)
   OPTIMIZER_BETAS: [0.9, 0.999]
-  WARMUP_STEPS: 2000         # Linear LR warm-up duration
+  WARMUP_STEPS: 2000         # LR warmup in training batches (cosine/constant/wsd); LR refreshed after successful optimizer updates
 
   LR_SCHEDULE_MODE: "step"   # "step" | "cosine" | "constant" | "wsd"
   # "step" schedule:
-  MILESTONES: [2000, 8000]   # Steps at which LR is multiplied by LR_GAMMA
+  MILESTONES: [2000, 8000]   # Training-batch milestones; LR refreshed at the next successful optimizer update
   LR_GAMMA: 0.1              # Multiplicative LR decay factor
   # "wsd" (warmup-stable-decay) schedule:
   WSD_DECAY_RATIO: 0.1       # Fraction of total steps spent in cosine decay phase
   WSD_MIN_LR_RATIO: 0.0      # Final LR as a fraction of peak LR
 
   ITER_N_MIN: 32             # Minimum CA rollout steps per batch
-  ITER_N_MAX: 64             # Maximum CA rollout steps per batch (sampled uniformly)
+  ITER_N_MAX: 64             # Inclusive maximum CA rollout steps per batch (sampled uniformly)
 
   GRADIENT_CLIPPING_NORM: 1.0         # Max gradient norm; 0 = disabled
   GRADIENT_CHECKPOINTING: false       # Trade compute for memory via activation checkpointing
   GRADIENT_CHECKPOINT_SEGMENTS: 16   # Number of checkpointing segments (only when GRADIENT_CHECKPOINTING: true)
-  GRADIENT_ACCUMULATION_STEPS: 1     # Accumulate gradients over N steps before update
+  GRADIENT_ACCUMULATION_STEPS: 1     # Average N generator-backward batches per update; final partial group is averaged and applied
 
   MIXED_PRECISION: false     # Enable automatic mixed precision (AMP)
 
@@ -123,6 +129,26 @@ DATASET:
 
   DROP_LAST_BATCH: true
 
+  # Moving MNIST history window
+  HISTORY_N: 1              # Number of seed frames
+  REVERSE_HISTORY_SEED: false # Current behavior: false = newest first; true = chronological
+
+  # Growing MNIST seed and augmentation settings
+  SEED_SIZE: 1              # Central seed square spans 2 * floor(SEED_SIZE / 2) + 1 pixels
+  ENABLE_ROTATION: false
+  ENABLE_ZOOM: false
+  Z_LATENT_NOISE_CHANNEL: false # Legacy flag; currently has no effect on generated samples
+
+# -----------------------------------------------------------------------------
+# CFG — classifier-free guidance training
+# -----------------------------------------------------------------------------
+CFG:
+  ENABLED: false
+  DROPOUT_PROB: 0.1         # Probability of replacing a condition with the null condition
+  NULL_CONDITION_TYPE: "zeros" # "zeros" | "learned" (currently also falls back to zeros)
+  GOAL_CHANNELS: false      # Use blurred targets as conditions for Growing MNIST
+  PRESERVE_CHANNELS: []     # Condition channel indices excluded from dropout
+
 # -----------------------------------------------------------------------------
 # PATTERN_POOL — persistent sample pool for continual / damage training
 # -----------------------------------------------------------------------------
@@ -130,11 +156,11 @@ PATTERN_POOL:
   ENABLED: false
   TIMESERIES_POOL: false     # Pool stores full timeseries (for sequence datasets)
   POOL_SIZE: 1024            # Number of states stored in the pool
-  POOL_DELAY: 1000           # Steps before pool sampling begins
-  POOL_START_RATIO: 0.5      # Fraction of each batch drawn from the pool (0.0–1.0)
-  POOL_END_RATIO: 0.5        # Fraction returned to pool after each step (0.0–1.0)
+  POOL_DELAY: 1000           # Nonnegative step at which pool sampling begins; 0 = immediate
+  POOL_START_RATIO: 0.5      # Initial scheduled fraction of each batch drawn from the pool (0.0–1.0)
+  POOL_END_RATIO: 0.5        # Final fraction drawn from the pool, reached at TRAINING.STEPS by linear scheduling (0.0–1.0)
   POOL_DMG_RATIO: 0.0        # Fraction of pool samples damaged before use (0.0–1.0)
-  POOL_DMG_DELAY: null       # Steps before damage is applied; null = immediate
+  POOL_DMG_DELAY: null       # Positive step at which damage begins; null = immediate
   POOL_MUTATION_RATIO: 0.0   # Fraction of pool samples mutated (0.0–1.0)
 
 # -----------------------------------------------------------------------------
@@ -153,17 +179,19 @@ LATENT_TRAINING:
   LATENT_AE_IN_CHANNEL: 4   # Encoder input channels (e.g. 4 for RGBA)
   LATENT_AE_OUT_CHANNEL: 4  # Decoder output channels
   LATENT_AE_CHANNEL: 64     # Latent bottleneck channels (= CA CHANNEL_N in latent mode)
-  LATENT_AE_COMPRESSION: 3  # Spatial downsampling as 2^N (must be ≥ 1)
+  LATENT_AE_COMPRESSION: 3  # AE only: spatial downsampling as 2^N (must be ≥ 1)
   APPLY_DAMAGE: false        # Apply damage augmentation during encoder training
 
-  AE_CHECKPOINT: null        # Path to a pre-trained encoder checkpoint; null = train from scratch
+  AE_CHECKPOINT: null        # Explicit encoder weights; CA training/inference otherwise load <run>/ae_checkpoints/<type>.pt
+                            # train_ae starts fresh when null, or initializes weights from this path
+  # Image height and width must be multiples of the selected encoder's downsampling factor.
 
   # VAE-specific
   VAE_BATCH_SIZE: 18
   VAE_KL_BETA: 1.0           # KL divergence weight
   VAE_KL_WARMUP_STEPS: 0    # Steps to linearly ramp KL weight from 0 to VAE_KL_BETA
   VAE_BASE_CHANNELS: 64      # Base feature channels in encoder/decoder
-  VAE_NUM_DOWNSAMPLES: 5     # Number of stride-2 downsampling stages
+  VAE_NUM_DOWNSAMPLES: 5     # VAE and VQVAE: stride-2 stages (spatial factor = 2^N)
   VAE_NORM_GROUPS: 32        # Groups in GroupNorm layers
   VAE_RECON_LOSS_TYPE: "l1"  # Pixel reconstruction loss: "l1" | "mse"
   VAE_RECON_LOSS_WEIGHT: 1.0
@@ -181,13 +209,13 @@ ADVERSARIAL:
   D_IN_CHANNELS: 4           # Discriminator input channels (must match generator output)
   D_FEATURES: [64, 128, 256, 512]  # Channel progression in the discriminator
   D_LEARNING_RATE: 0.001
-  D_WARMUP_STEPS: 0
+  D_WARMUP_STEPS: 0          # Warmup duration in discriminator updates
   D_START_TRAINING: 0        # Step at which discriminator training begins
-  D_GAMMA: 0.1               # LR decay factor for discriminator scheduler
-  D_N_CRITIC: 1              # Discriminator updates per generator update
+  D_GAMMA: 0.1              # Final discriminator LR / D_LEARNING_RATE (0–1); cosine decay after warmup
+  D_N_CRITIC: 1              # Adversarial-phase batch interval between generator backwards; critic updates each batch, generator accumulates separately
   D_GP_WEIGHT: 10.0          # Gradient penalty coefficient λ
-  D_DOWNSCALE_FACTOR: 1      # Spatially downscale inputs to discriminator by this factor
-  LPIPS_WEIGHT: 0.0          # LPIPS perceptual term weight in generator loss
+  D_DOWNSCALE_FACTOR: 1      # Positive integer divisor of critic input height/width; area resize includes conditions/seeds and gradient penalty
+  LPIPS_WEIGHT: 0.0          # Additional full-resolution LPIPS weight, including warmup; 0 disables; uses TRAINING.LPIPS_NET
   ADV_WEIGHT: 1.0            # Adversarial term weight in generator loss
   RECON_WEIGHT: 1.0          # Reconstruction term weight in generator loss
   SEED_TO_CRITIC: false      # Pass seed image as extra channel to discriminator (conditional GAN)

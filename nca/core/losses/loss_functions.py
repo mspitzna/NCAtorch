@@ -178,7 +178,7 @@ class OverflowLoss(Loss):
 
     def forward(self, predictions, targets, min_val=0.0, max_val=1.0):
         overflow_loss = (predictions - predictions.clamp(min_val, max_val)).abs().mean()
-        return {"total_loss": overflow_loss, "overflow_loss": overflow_loss}
+        return {"total_loss": self.overflow_weight * overflow_loss, "overflow_loss": overflow_loss}
 
 
 class GrayscaleMSELoss(torch.nn.Module):
@@ -408,7 +408,7 @@ class AdversarialLoss(Loss):
         return {"total_loss": loss_value}
 
 class VGGStyleOTLoss(Loss):
-    def __init__(self, proj_n=32, device=None, overflow_loss=False,):
+    def __init__(self, proj_n=32, device=None, overflow_loss=False, overflow_weight=1.0):
         super(VGGStyleOTLoss, self).__init__()
         self.device = device if device is not None else torch.device('cpu')
         self.vgg16 = models.vgg16(weights='IMAGENET1K_V1').features.to(self.device).eval()
@@ -416,6 +416,7 @@ class VGGStyleOTLoss(Loss):
         self.style_layers = [1, 6, 11, 18, 25]
         # Remove target_img and yy from __init__
         self.overflow_loss = overflow_loss
+        self.overflow_weight = overflow_weight
 
     def calc_styles_vgg(self, imgs):
         # Ensure imgs are on the correct device
@@ -462,7 +463,8 @@ class VGGStyleOTLoss(Loss):
         xx = self.calc_styles_vgg(imgs)
         yy = self.calc_styles_vgg(target_imgs)
         # Compute the total loss as the sum over all style layers
-        total_loss = sum(self.ot_loss(x, y) for x, y in zip(xx, yy))
+        style_loss = sum(self.ot_loss(x, y) for x, y in zip(xx, yy))
+        total_loss = style_loss
 
         if self.overflow_loss:
             overflow_loss_img = (imgs[:, :3, :, :] - imgs[:, :3, :, :].clamp(0, 1.0)).abs().mean()
@@ -472,8 +474,8 @@ class VGGStyleOTLoss(Loss):
             else:
                 overflow_loss_hidden = torch.tensor(0.0, device=imgs.device)
             overflow_loss = overflow_loss_img + overflow_loss_hidden
-            total_loss = total_loss + overflow_loss
-            return {"total_loss": total_loss, "overflow_loss": overflow_loss, "ot_loss": total_loss}
+            total_loss = total_loss + self.overflow_weight * overflow_loss
+            return {"total_loss": total_loss, "overflow_loss": overflow_loss, "ot_loss": style_loss}
         
 
         return {"total_loss": total_loss, "ot_loss": total_loss}

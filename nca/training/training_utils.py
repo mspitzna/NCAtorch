@@ -7,7 +7,7 @@ def export_model(ca, base_fn):
     torch.save(ca.state_dict(), base_fn)
 
 
-def create_warmup_cosine_scheduler(optimizer, warmup_steps, total_steps):
+def create_warmup_cosine_scheduler(optimizer, warmup_steps, total_steps, min_lr_ratio=0.0):
     """
     Creates a learning rate scheduler with linear warmup followed by cosine decay.
     
@@ -15,14 +15,20 @@ def create_warmup_cosine_scheduler(optimizer, warmup_steps, total_steps):
         optimizer: The optimizer to schedule
         warmup_steps: Number of warmup steps (linear ramp-up)
         total_steps: Total number of training steps
+        min_lr_ratio: Final learning rate divided by the peak learning rate.
         
     Returns:
         LambdaLR scheduler
+
+    Config validates configured ranges before training starts. These guards
+    also cover direct callers, which supply scalar arguments without a Config.
     """
     if total_steps <= 0:
         raise ValueError("total_steps must be positive for cosine decay.")
     if warmup_steps < 0:
         raise ValueError("warmup_steps cannot be negative.")
+    if not 0.0 <= min_lr_ratio <= 1.0:
+        raise ValueError("min_lr_ratio must be between 0 and 1.")
 
     def lr_lambda_warmup_cosine(current_step):
         """
@@ -39,7 +45,7 @@ def create_warmup_cosine_scheduler(optimizer, warmup_steps, total_steps):
             decay_steps = total_steps - warmup_steps
             # Prevent division by zero or issues if warmup >= total steps
             if decay_steps <= 0:
-                return 0.0  # End of training, LR should be minimal
+                return min_lr_ratio
             # Calculate progress within the decay phase (from 0 to 1)
             # Ensure step doesn't exceed total steps for calculation
             effective_step = min(current_step, total_steps)
@@ -47,8 +53,7 @@ def create_warmup_cosine_scheduler(optimizer, warmup_steps, total_steps):
             # Calculate cosine annealing factor (ranges from 1 to 0)
             # 0.5 * (1 + cos(pi * progress))
             cosine_factor = 0.5 * (1.0 + math.cos(math.pi * progress))
-            # Assuming eta_min = 0, the factor scales from 1 down to 0
-            return cosine_factor
+            return min_lr_ratio + (1.0 - min_lr_ratio) * cosine_factor
 
     return lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda_warmup_cosine)
 

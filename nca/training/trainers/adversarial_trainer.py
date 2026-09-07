@@ -4,15 +4,17 @@ import wandb
 from nca.training.trainers.base_trainer import BaseTrainer # Assuming this is your original BaseTrainer file
 from nca.core.models.critic import Critic
 from nca.training.training_utils import create_warmup_cosine_scheduler
-from nca.core.losses.loss_functions import LPIPSLoss, ReconstructionLoss, L1Loss
+from nca.core.losses.loss_factory import create_loss_fn
+from nca.core.losses.loss_functions import LPIPSLoss
 
 class AdversarialTrainer(BaseTrainer):
     """Adversarial trainer implementing WGAN-GP for high-quality image generation.
 
     Maintains a separate ``Critic`` network alongside the CA generator and
     alternates their updates according to the ``D_N_CRITIC`` schedule.  The
-    total generator loss is a weighted sum of a reconstruction term
-    (MSE / L1 / LPIPS, set via ``TRAINING.LOSS_FN``) and the adversarial term.
+    total generator loss is a weighted sum of the registered loss selected
+    by ``TRAINING.LOSS_FN``, the adversarial term,
+    and an optional additional LPIPS term weighted by ``LPIPS_WEIGHT``.
 
     Because two optimizers and two scalers are involved, this trainer overrides
     ``_run_train_step`` directly rather than implementing ``_compute_losses``.
@@ -23,7 +25,8 @@ class AdversarialTrainer(BaseTrainer):
     Key config fields:
         ``ADVERSARIAL.ADV_WEIGHT`` — weight of the adversarial loss term.
         ``ADVERSARIAL.RECON_WEIGHT`` — weight of the reconstruction loss term.
-        ``ADVERSARIAL.D_N_CRITIC`` — critic updates per generator update.
+        ``ADVERSARIAL.D_N_CRITIC`` — batch interval between generator backward passes.
+        Generator gradients accumulate across these passes; the critic updates each batch.
         ``ADVERSARIAL.D_START_TRAINING`` — step at which adversarial training begins.
         ``ADVERSARIAL.D_GP_WEIGHT`` — gradient-penalty coefficient.
     """
@@ -50,18 +53,22 @@ class AdversarialTrainer(BaseTrainer):
         
         # Critic's dedicated optimizer and scheduler
         self.d_optimizer = torch.optim.Adam(self.critic.parameters(), lr=self.config.ADVERSARIAL.D_LEARNING_RATE, betas=self.config.TRAINING.OPTIMIZER_BETAS)
-        self.d_scheduler = create_warmup_cosine_scheduler(self.d_optimizer, self.config.ADVERSARIAL.D_WARMUP_STEPS, self.config.TRAINING.STEPS)
+        # The critic's clock starts when discriminator training begins.
+        critic_steps = max(1, self.config.TRAINING.STEPS - self.config.ADVERSARIAL.D_START_TRAINING)
+        self.d_scheduler = create_warmup_cosine_scheduler(
+            self.d_optimizer,
+            self.config.ADVERSARIAL.D_WARMUP_STEPS,
+            critic_steps,
+            min_lr_ratio=self.config.ADVERSARIAL.D_GAMMA,
+        )
         
         # Load hyperparameters from config
         self.adv_weight = self.config.ADVERSARIAL.ADV_WEIGHT
         self.recon_weight = self.config.ADVERSARIAL.RECON_WEIGHT
+        self.lpips_weight = self.config.ADVERSARIAL.LPIPS_WEIGHT
         self.gp_weight = self.config.ADVERSARIAL.D_GP_WEIGHT
-        self.n_critic = self.config.ADVERSARIAL.D_N_CRITIC
         self.d_start_training = self.config.ADVERSARIAL.D_START_TRAINING
         self.seed_to_critic = self.config.ADVERSARIAL.SEED_TO_CRITIC
-
-        # This counter tracks steps to decide when to update the generator
-        self.step_counter = 0
 
         # Separate GradScaler for the critic (recommended for GANs)
         self.d_scaler = (
@@ -72,14 +79,14 @@ class AdversarialTrainer(BaseTrainer):
 
         # Initialize reconstruction loss based on config
         recon_loss_type = self.config.TRAINING.LOSS_FN
-        if recon_loss_type == "lpips":
-            self.recon_loss = LPIPSLoss(device=self.device)
-        elif recon_loss_type == "l1":
-            self.recon_loss = L1Loss(overflow_loss=self.config.TRAINING.OVERFLOW_LOSS)
-        elif recon_loss_type == "mse":
-            self.recon_loss = ReconstructionLoss(overflow_loss=self.config.TRAINING.OVERFLOW_LOSS)
-        else:
-            raise ValueError(f"Unknown RECON_LOSS_TYPE: {recon_loss_type}")
+        self.recon_loss = create_loss_fn(self.config)
+        self.lpips_loss = None
+        if self.lpips_weight > 0:
+            self.lpips_loss = (
+                self.recon_loss if recon_loss_type == "lpips"
+                else LPIPSLoss(device=self.device, net=self.config.TRAINING.LPIPS_NET)
+            )
+            self.lpips_loss.eval().requires_grad_(False)
         print(f"Using reconstruction loss: {recon_loss_type}")
 
         if self.config.LOGGING.WANDB:
@@ -99,9 +106,7 @@ class AdversarialTrainer(BaseTrainer):
             condition = condition.unsqueeze(-1).unsqueeze(-1)
             condition = condition.expand(-1, -1, target_img.shape[2], target_img.shape[3])
         
-        # Always zero out the generator's gradients. The BaseTrainer will call step() later.
-        # Gradients will only be present if it's the generator's turn to be trained.
-        self.optimizer.zero_grad()
+        # BaseTrainer owns the generator's gradient group and clears it after updates.
         
         # --- 1. TRAIN THE CRITIC (on every step after start_training) ---
         if self.current_step >= self.d_start_training and self.adv_weight > 0:
@@ -116,20 +121,8 @@ class AdversarialTrainer(BaseTrainer):
                 
                 fake_images = prediction_image.detach()
 
-                # Construct critic inputs based on flags
-                real_parts = [target_img[:, :self.config.ADVERSARIAL.D_IN_CHANNELS]]
-                fake_parts = [fake_images[:, :self.config.ADVERSARIAL.D_IN_CHANNELS]]
-                
-                if condition is not None:
-                    real_parts.append(condition)
-                    fake_parts.append(condition)
-                
-                if self.seed_to_critic:
-                    real_parts.append(initial_state)
-                    fake_parts.append(initial_state)
-                
-                real_input = torch.cat(real_parts, dim=1)
-                fake_input = torch.cat(fake_parts, dim=1)
+                real_input = self._prepare_critic_input(target_img, initial_state, condition)
+                fake_input = self._prepare_critic_input(fake_images, initial_state, condition)
 
                 real_logits = self.critic(real_input)
                 fake_logits = self.critic(fake_input)
@@ -172,11 +165,10 @@ class AdversarialTrainer(BaseTrainer):
         self.ca_model.train()
         
         # Check if it's the generator's turn to be updated
-        is_generator_turn = (self.step_counter % self.n_critic == 0)
+        is_generator_turn = self._should_train_generator(self.current_step)
 
-        # Always calculate reconstruction loss for logging and for generator updates.
-        # Generator update only happens if adversarial training is active.
-        if (self.current_step < self.d_start_training) or is_generator_turn:
+        # Generator batches contribute to the gradient group owned by BaseTrainer.
+        if is_generator_turn:
             with torch.amp.autocast(device_type=self.device, enabled=self.config.TRAINING.MIXED_PRECISION):
                 # We need to run the forward pass with gradient tracking to update the generator
                 prediction_image, final_state = self.forward(initial_state, condition, target_img, logging=logging)
@@ -188,15 +180,18 @@ class AdversarialTrainer(BaseTrainer):
                 if self.recon_weight > 0:
                     total_g_loss += self.recon_weight * recon_loss / self.accumulation_steps
 
+                # Perceptual supervision uses full-resolution images, including warmup.
+                if self.lpips_loss is not None:
+                    lpips_loss = (
+                        recon_loss if self.lpips_loss is self.recon_loss
+                        else self.lpips_loss(prediction_image, target_img)["total_loss"]
+                    )
+                    self.logger.add_metric("lpips_loss", lpips_loss.item())
+                    total_g_loss += self.lpips_weight * lpips_loss / self.accumulation_steps
+
                 # Add adversarial loss only when it's the generator's turn during adversarial phase
                 if self.current_step >= self.d_start_training and self.adv_weight > 0:
-                    fake_parts_for_g = [prediction_image[:, :self.config.ADVERSARIAL.D_IN_CHANNELS]]
-                    if condition is not None:
-                        fake_parts_for_g.append(condition)
-                    if self.seed_to_critic:
-                        fake_parts_for_g.append(initial_state)
-                    
-                    fake_input_for_g = torch.cat(fake_parts_for_g, dim=1)
+                    fake_input_for_g = self._prepare_critic_input(prediction_image, initial_state, condition)
                     fake_logits_for_g = self.critic(fake_input_for_g)
                     g_loss = -torch.mean(fake_logits_for_g)
                     self.logger.add_metric("g_loss", g_loss.item())
@@ -220,13 +215,41 @@ class AdversarialTrainer(BaseTrainer):
                 self.logger.add_metric("recon_loss", recon_loss.item())
         
         # --- Finalization ---
-        final_state_for_commit = final_state
+        final_state_for_commit = final_state.detach()
         prediction_image_for_log = prediction_image.detach()
         
-        self.step_counter += 1
         self.current_step += 1
         
         return prediction_image_for_log, final_state_for_commit
+
+    def _should_train_generator(self, step: int) -> bool:
+        adv = self.config.ADVERSARIAL
+        return (
+            adv.ADV_WEIGHT == 0
+            or step < adv.D_START_TRAINING
+            or step % adv.D_N_CRITIC == 0
+        )
+
+    def _prepare_critic_input(self, images, initial_state, condition=None):
+        """Resize images, conditions and optional seeds to the critic's resolution."""
+        factor = self.config.ADVERSARIAL.D_DOWNSCALE_FACTOR
+        size = (images.shape[-2] // factor, images.shape[-1] // factor)
+        if min(size) < 1:
+            raise ValueError("D_DOWNSCALE_FACTOR exceeds the image dimensions.")
+
+        def resize(tensor):
+            if tensor.shape[-2:] == size:
+                return tensor
+            return nn.functional.interpolate(tensor, size=size, mode="area")
+
+        parts = [resize(images[:, :self.config.ADVERSARIAL.D_IN_CHANNELS])]
+        if condition is not None:
+            if condition.ndim == 2:
+                condition = condition[:, :, None, None].expand(-1, -1, *size)
+            parts.append(resize(condition))
+        if self.seed_to_critic:
+            parts.append(resize(initial_state))
+        return torch.cat(parts, dim=1)
 
     def gradient_penalty(self, initial_state, real_images, fake_images, condition=None):
         """Calculates the gradient penalty for WGAN-GP."""
@@ -234,20 +257,7 @@ class AdversarialTrainer(BaseTrainer):
         epsilon = torch.rand(batch_size, 1, 1, 1, device=self.device).repeat(1, c, h, w)
         interpolated_images = epsilon * real_images + (1 - epsilon) * fake_images
         
-        interpolated_parts = [interpolated_images]
-        
-        if condition is not None:
-            # Ensure condition is resized to match interpolated_images if needed
-            if condition.shape[2:] != (h, w):
-                condition_resized = nn.functional.interpolate(condition, size=(h, w), mode='bilinear', align_corners=False)
-            else:
-                condition_resized = condition
-            interpolated_parts.append(condition_resized)
-        
-        if self.seed_to_critic:
-            interpolated_parts.append(initial_state)
-        
-        interpolated_input = torch.cat(interpolated_parts, dim=1)
+        interpolated_input = self._prepare_critic_input(interpolated_images, initial_state, condition)
 
         interpolated_input.requires_grad_(True)
         

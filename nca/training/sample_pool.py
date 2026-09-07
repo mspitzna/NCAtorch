@@ -165,9 +165,11 @@ class SamplePool:
 
             # --- Optional damage (applied to x or z) ---
             # Note: apply_damage needs to work on both image and latent shapes/ranges
-            if self.current_damage_ratio > 0.0 and replace_indices.numel() > 0:
-                 # Be cautious if apply_damage assumes image structure/range
-                 current_batch_data[replace_indices] = self.apply_damage(current_batch_data[replace_indices])
+            # Round down to a whole number of pool-drawn samples.
+            n_damage = int(n_replace * self.current_damage_ratio)
+            if n_damage > 0:
+                damage_indices = replace_indices[torch.randperm(n_replace)[:n_damage]]
+                current_batch_data[damage_indices] = self.apply_damage(current_batch_data[damage_indices])
 
         # Return the modified state (x or z), and potentially modified cond and true
         return current_batch_data, cond, true
@@ -287,13 +289,12 @@ class TimeseriesSamplePool(SamplePool):
         device: torch.device = torch.device("cpu"),
     ):
         super().__init__(
-            pool_size,
-            seed_ratio,
-            damage_ratio,
-            delay,
-            class_transmute,
-            replace_after_layer,
-            device,
+            pool_size=pool_size,
+            seed_ratio=seed_ratio,
+            damage_ratio=damage_ratio,
+            delay=delay,
+            replace_after_layer=replace_after_layer,
+            device=device,
         )
         self.pool_map = {}
 
@@ -352,6 +353,7 @@ class TimeseriesSamplePool(SamplePool):
         batch_size = current_batch_data.size(0)
         # Decide how many to replace
         n_replace = int(self.seed_ratio * batch_size)
+        reused_indices = []
 
         if n_replace > 0 and len(self.data_pool) > 0:
             replace_indices = torch.randperm(batch_size)[:n_replace]
@@ -363,14 +365,18 @@ class TimeseriesSamplePool(SamplePool):
                     pool_idx = self.pool_map[prev_key]
                     prev_prediction = self.data_pool[pool_idx].to(self.device)
                     current_batch_data[i] = prev_prediction
+                    reused_indices.append(i)
 
                     # Optionally replace the true label if you want
                     # true[i] = something if you store the next ground truth
                     # or keep it as is if your dataset is still correct.
 
-        # (Optional) apply damage
-        if self.current_damage_ratio > 0.0:
-            current_batch_data = self.apply_damage(current_batch_data)
+        # Damage a fraction of successful replacements, leaving fresh seeds intact.
+        n_damage = int(len(reused_indices) * self.current_damage_ratio)
+        if n_damage > 0:
+            reused_indices = torch.stack(reused_indices)
+            damage_indices = reused_indices[torch.randperm(reused_indices.numel())[:n_damage]]
+            current_batch_data[damage_indices] = self.apply_damage(current_batch_data[damage_indices])
 
         return current_batch_data, cond, true
 

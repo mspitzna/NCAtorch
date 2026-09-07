@@ -45,11 +45,7 @@ def _create_emoji(config: Config, _train: bool):
         target_padding=config.DATASET.TARGET_PADDING,
         channel_n=config.MODEL.CHANNEL_N,
         condition_size=len(config.DATASET.EMOJIS),
-        total_samples=(
-            config.TRAINING.STEPS * config.TRAINING.BATCH_SIZE
-            if config.TRAINING.STEPS != -1
-            else float("inf")
-        ),
+        total_samples=config.TRAINING.STEPS * config.TRAINING.BATCH_SIZE,
         device="cpu",
         rectangle=False,
     )
@@ -78,11 +74,7 @@ def _create_ot(config: Config, _train: bool):
         img_size=config.DATASET.TARGET_SIZE,
         device="cpu",
         condition_size=0,
-        total_samples=(
-            config.TRAINING.STEPS * config.TRAINING.BATCH_SIZE
-            if config.TRAINING.STEPS != -1
-            else float("inf")
-        ),
+        total_samples=config.TRAINING.STEPS * config.TRAINING.BATCH_SIZE,
     )
     size = config.DATASET.TARGET_SIZE
     return dataset, 0, size, size
