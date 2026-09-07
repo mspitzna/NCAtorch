@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_serializer, field_validator, model_validator
 
 
 class StrictModel(BaseModel):
@@ -93,6 +93,7 @@ class ModelConfig(StrictModel):
     HIDDEN_CHANNELS: list[Annotated[int, Field(gt=0)]] = Field(default_factory=lambda: [64])
     CHANNEL_N: int = Field(default=16, gt=0)
     CHANNEL_OUT: int | None = Field(default=None, gt=0)
+    _channel_out_auto: bool = PrivateAttr(default=False)
     USE_POSITIONAL_EMBEDDINGS: bool = False
     LIVING_MASK: bool = False
     LIVING_MASK_INDEX: int = Field(default=3, ge=0)
@@ -131,8 +132,19 @@ class ModelConfig(StrictModel):
     @model_validator(mode="after")
     def set_channel_out(self):
         if self.CHANNEL_OUT is None:  # Not explicitly set, use CHANNEL_N
+            self._channel_out_auto = True
             self.CHANNEL_OUT = self.CHANNEL_N
         return self
+
+    @property
+    def channel_out_is_auto(self) -> bool:
+        """Whether CHANNEL_OUT was derived from CHANNEL_N when parsing this config."""
+        return self._channel_out_auto
+
+    @field_serializer("CHANNEL_OUT")
+    def serialize_channel_out(self, value):
+        # Preserve automatic sizing across saved configs and subsequent overrides.
+        return None if self._channel_out_auto else value
 
     @model_validator(mode="after")
     def check_living_mask_index(self):
@@ -156,14 +168,17 @@ class TrainingConfig(StrictModel):
     """Hyperparameters for the main CA training loop.
 
     Attributes:
-        BATCH_SIZE: Number of grids per optimisation step.
-        STEPS: Total number of training steps.
+        BATCH_SIZE: Number of grids per training batch.
+        STEPS: Total training batches, including critic-only batches.
         LOSS_FN: Reconstruction loss key from ``LOSS_FN_REGISTRY`` —
             ``mse``, ``l1``, ``lpips``, ``vgg``, ``p_ce``, ``i_ce``, ``overflow``.
         OVERFLOW_LOSS: Add an overflow penalty to the loss.
         OVERFLOW_WEIGHT: Weight applied to the overflow penalty term.
         LEARNING_RATE: Initial learning rate.
-        WARMUP_STEPS: Linear LR warm-up duration.
+        WARMUP_STEPS: Linear LR warm-up in training batches (cosine/constant/wsd).
+            Scheduler values are refreshed after successful optimizer updates.
+        GRADIENT_ACCUMULATION_STEPS: Generator-backward batches averaged per
+            optimizer update. A final partial group is averaged and applied.
         LR_SCHEDULE_MODE: LR schedule — ``step``, ``cosine``, or ``constant``.
         ITER_N_MIN: Minimum CA rollout steps per batch.
         ITER_N_MAX: Inclusive maximum CA rollout steps per batch (sampled uniformly).
@@ -451,7 +466,9 @@ class AdversarialConfig(StrictModel):
         D_GAMMA: Final discriminator LR divided by D_LEARNING_RATE (0 to 1).
             After warmup, cosine decay spans the remaining updates following
             D_START_TRAINING; skipped AMP updates do not advance the schedule.
-        D_N_CRITIC: Discriminator updates per generator update.
+        D_N_CRITIC: Batch interval between generator backward passes during
+            adversarial training. The critic updates each batch; generator
+            updates average GRADIENT_ACCUMULATION_STEPS backward passes.
         D_GP_WEIGHT: Gradient penalty coefficient λ in the WGAN-GP loss.
         D_DOWNSCALE_FACTOR: Spatially downscale inputs to the discriminator
             by this positive integer factor using area resizing. Applies to

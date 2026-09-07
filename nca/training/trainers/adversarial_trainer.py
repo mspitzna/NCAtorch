@@ -25,7 +25,8 @@ class AdversarialTrainer(BaseTrainer):
     Key config fields:
         ``ADVERSARIAL.ADV_WEIGHT`` — weight of the adversarial loss term.
         ``ADVERSARIAL.RECON_WEIGHT`` — weight of the reconstruction loss term.
-        ``ADVERSARIAL.D_N_CRITIC`` — critic updates per generator update.
+        ``ADVERSARIAL.D_N_CRITIC`` — batch interval between generator backward passes.
+        Generator gradients accumulate across these passes; the critic updates each batch.
         ``ADVERSARIAL.D_START_TRAINING`` — step at which adversarial training begins.
         ``ADVERSARIAL.D_GP_WEIGHT`` — gradient-penalty coefficient.
     """
@@ -66,12 +67,8 @@ class AdversarialTrainer(BaseTrainer):
         self.recon_weight = self.config.ADVERSARIAL.RECON_WEIGHT
         self.lpips_weight = self.config.ADVERSARIAL.LPIPS_WEIGHT
         self.gp_weight = self.config.ADVERSARIAL.D_GP_WEIGHT
-        self.n_critic = self.config.ADVERSARIAL.D_N_CRITIC
         self.d_start_training = self.config.ADVERSARIAL.D_START_TRAINING
         self.seed_to_critic = self.config.ADVERSARIAL.SEED_TO_CRITIC
-
-        # This counter tracks steps to decide when to update the generator
-        self.step_counter = 0
 
         # Separate GradScaler for the critic (recommended for GANs)
         self.d_scaler = (
@@ -109,9 +106,7 @@ class AdversarialTrainer(BaseTrainer):
             condition = condition.unsqueeze(-1).unsqueeze(-1)
             condition = condition.expand(-1, -1, target_img.shape[2], target_img.shape[3])
         
-        # Always zero out the generator's gradients. The BaseTrainer will call step() later.
-        # Gradients will only be present if it's the generator's turn to be trained.
-        self.optimizer.zero_grad()
+        # BaseTrainer owns the generator's gradient group and clears it after updates.
         
         # --- 1. TRAIN THE CRITIC (on every step after start_training) ---
         if self.current_step >= self.d_start_training and self.adv_weight > 0:
@@ -170,11 +165,10 @@ class AdversarialTrainer(BaseTrainer):
         self.ca_model.train()
         
         # Check if it's the generator's turn to be updated
-        is_generator_turn = (self.step_counter % self.n_critic == 0)
+        is_generator_turn = self._should_train_generator(self.current_step)
 
-        # Always calculate reconstruction loss for logging and for generator updates.
-        # Generator update only happens if adversarial training is active.
-        if (self.current_step < self.d_start_training) or is_generator_turn:
+        # Generator batches contribute to the gradient group owned by BaseTrainer.
+        if is_generator_turn:
             with torch.amp.autocast(device_type=self.device, enabled=self.config.TRAINING.MIXED_PRECISION):
                 # We need to run the forward pass with gradient tracking to update the generator
                 prediction_image, final_state = self.forward(initial_state, condition, target_img, logging=logging)
@@ -221,13 +215,20 @@ class AdversarialTrainer(BaseTrainer):
                 self.logger.add_metric("recon_loss", recon_loss.item())
         
         # --- Finalization ---
-        final_state_for_commit = final_state
+        final_state_for_commit = final_state.detach()
         prediction_image_for_log = prediction_image.detach()
         
-        self.step_counter += 1
         self.current_step += 1
         
         return prediction_image_for_log, final_state_for_commit
+
+    def _should_train_generator(self, step: int) -> bool:
+        adv = self.config.ADVERSARIAL
+        return (
+            adv.ADV_WEIGHT == 0
+            or step < adv.D_START_TRAINING
+            or step % adv.D_N_CRITIC == 0
+        )
 
     def _prepare_critic_input(self, images, initial_state, condition=None):
         """Resize images, conditions and optional seeds to the critic's resolution."""
