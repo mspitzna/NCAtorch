@@ -153,17 +153,19 @@ LATENT_TRAINING:
   LATENT_AE_IN_CHANNEL: 4   # Encoder input channels (e.g. 4 for RGBA)
   LATENT_AE_OUT_CHANNEL: 4  # Decoder output channels
   LATENT_AE_CHANNEL: 64     # Latent bottleneck channels (= CA CHANNEL_N in latent mode)
-  LATENT_AE_COMPRESSION: 3  # Spatial downsampling as 2^N (must be ≥ 1)
+  LATENT_AE_COMPRESSION: 3  # AE only: spatial downsampling as 2^N (must be ≥ 1)
   APPLY_DAMAGE: false        # Apply damage augmentation during encoder training
 
-  AE_CHECKPOINT: null        # Path to a pre-trained encoder checkpoint; null = train from scratch
+  AE_CHECKPOINT: null        # Explicit encoder weights; CA training/inference otherwise load <run>/ae_checkpoints/<type>.pt
+                            # train_ae starts fresh when null, or initializes weights from this path
+  # Image height and width must be multiples of the selected encoder's downsampling factor.
 
   # VAE-specific
   VAE_BATCH_SIZE: 18
   VAE_KL_BETA: 1.0           # KL divergence weight
   VAE_KL_WARMUP_STEPS: 0    # Steps to linearly ramp KL weight from 0 to VAE_KL_BETA
   VAE_BASE_CHANNELS: 64      # Base feature channels in encoder/decoder
-  VAE_NUM_DOWNSAMPLES: 5     # Number of stride-2 downsampling stages
+  VAE_NUM_DOWNSAMPLES: 5     # VAE and VQVAE: stride-2 stages (spatial factor = 2^N)
   VAE_NORM_GROUPS: 32        # Groups in GroupNorm layers
   VAE_RECON_LOSS_TYPE: "l1"  # Pixel reconstruction loss: "l1" | "mse"
   VAE_RECON_LOSS_WEIGHT: 1.0

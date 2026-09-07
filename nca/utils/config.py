@@ -350,12 +350,13 @@ class LatentConfig(StrictModel):
         LATENT_AE_IN_CHANNEL: Input channels to the encoder (e.g. 4 for RGBA).
         LATENT_AE_OUT_CHANNEL: Output channels from the decoder.
         LATENT_AE_CHANNEL: Latent bottleneck channels (CA state size in latent mode).
-        LATENT_AE_COMPRESSION: Spatial downsampling factor as 2^N.
+        LATENT_AE_COMPRESSION: AE spatial downsampling factor as 2^N.
         AE_CHECKPOINT: Explicit path to a pre-trained encoder checkpoint;
-            if ``None`` the default path inside ``FOLDER_NAME`` is used.
+            CA training/inference use the default path inside ``FOLDER_NAME``
+            if ``None``. Encoder training starts fresh if ``None``.
         VAE_KL_BETA: Weight of the KL divergence term in the VAE loss.
         VAE_BASE_CHANNELS: Base feature channels in VAE encoder/decoder.
-        VAE_NUM_DOWNSAMPLES: Number of stride-2 downsampling stages.
+        VAE_NUM_DOWNSAMPLES: Number of stride-2 stages for VAE and VQVAE.
         VAE_NORM_GROUPS: Group normalisation groups in VAE conv layers.
         VAE_RECON_LOSS_TYPE: Pixel reconstruction loss — ``l1`` or ``mse``.
         VAE_RECON_LOSS_WEIGHT: Weight for the pixel reconstruction term.
@@ -388,6 +389,34 @@ class LatentConfig(StrictModel):
     VAE_VGG_LOSS_WEIGHT: float = Field(default=1.0, ge=0)
     VQVAE_NUM_EMBEDDINGS: int = Field(default=512, gt=0)
     VQVAE_COMMITMENT_COST: float = Field(default=0.25, ge=0)
+
+    @model_validator(mode="after")
+    def check_encoder_dimensions(self):
+        if self.ENCODER_TYPE == "AE":
+            if self.LATENT_AE_CHANNEL < 2 ** (self.LATENT_AE_COMPRESSION - 1):
+                raise ValueError(
+                    "LATENT_AE_CHANNEL must be at least 2^(LATENT_AE_COMPRESSION - 1) "
+                    "to keep AE decoder channels positive."
+                )
+        elif self.ENCODER_TYPE in {"VAE", "VQVAE"}:
+            if self.VAE_NUM_DOWNSAMPLES > 0 and self.VAE_BASE_CHANNELS % self.VAE_NORM_GROUPS:
+                raise ValueError("VAE_BASE_CHANNELS must be divisible by VAE_NORM_GROUPS.")
+        return self
+
+    def get_latent_shape(self, height: int, width: int) -> tuple[int, int]:
+        """Validate actual image dimensions and return the encoder's spatial shape."""
+        stages = (
+            self.LATENT_AE_COMPRESSION
+            if self.ENCODER_TYPE == "AE"
+            else self.VAE_NUM_DOWNSAMPLES
+        )
+        factor = 2 ** stages
+        if height < factor or width < factor or height % factor or width % factor:
+            raise ValueError(
+                f"{self.ENCODER_TYPE} image height and width must be positive multiples of {factor}; "
+                f"got {height}x{width}. The decoder upsamples by {factor}."
+            )
+        return height // factor, width // factor
 
     @field_validator("ENCODER_TYPE")
     @classmethod

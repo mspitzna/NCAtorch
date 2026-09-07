@@ -11,6 +11,21 @@ from nca.utils.config import (
 )
 
 
+def test_ae_decoder_requires_nonzero_channel_widths():
+    with pytest.raises(ValidationError, match="LATENT_AE_CHANNEL must be at least"):
+        LatentConfig(LATENT_AE_COMPRESSION=4, LATENT_AE_CHANNEL=4)
+    LatentConfig(LATENT_AE_COMPRESSION=4, LATENT_AE_CHANNEL=8)
+
+
+@pytest.mark.parametrize("encoder_type", ["VAE", "VQVAE"])
+def test_group_norm_channels_must_be_divisible(encoder_type):
+    with pytest.raises(ValidationError, match="VAE_BASE_CHANNELS must be divisible"):
+        LatentConfig(ENCODER_TYPE=encoder_type, VAE_BASE_CHANNELS=10, VAE_NORM_GROUPS=4)
+    LatentConfig(ENCODER_TYPE=encoder_type, VAE_BASE_CHANNELS=8, VAE_NORM_GROUPS=4)
+    # Without downsampling there are no GroupNorm layers.
+    LatentConfig(ENCODER_TYPE=encoder_type, VAE_NUM_DOWNSAMPLES=0, VAE_BASE_CHANNELS=10, VAE_NORM_GROUPS=4)
+
+
 @pytest.mark.parametrize("section, field, value", [
     ("TRAINING", "WARMUP_STEPS", -1),
     ("ADVERSARIAL", "D_WARMUP_STEPS", -1),
