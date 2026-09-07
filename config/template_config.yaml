@@ -68,8 +68,8 @@ MODEL:
 # TRAINING — optimiser and rollout hyperparameters
 # -----------------------------------------------------------------------------
 TRAINING:
-  BATCH_SIZE: 12             # Grids per optimisation step (must be > 0)
-  STEPS: 10000               # Total training steps
+  BATCH_SIZE: 12             # Grids per training batch (must be > 0)
+  STEPS: 10000               # Total training batches, including critic-only batches
 
   LOSS_FN: "mse"             # LOSS_FN_REGISTRY key: "mse" | "l1" | "lpips" | "vgg" | "p_ce" | "i_ce" | "overflow"
   OVERFLOW_LOSS: false       # Add overflow penalty to the loss
@@ -77,11 +77,11 @@ TRAINING:
 
   LEARNING_RATE: 0.002       # Peak learning rate (0 < lr ≤ 1)
   OPTIMIZER_BETAS: [0.9, 0.999]
-  WARMUP_STEPS: 2000         # Linear LR warm-up duration
+  WARMUP_STEPS: 2000         # LR warmup in training batches (cosine/constant/wsd); LR refreshed after successful optimizer updates
 
   LR_SCHEDULE_MODE: "step"   # "step" | "cosine" | "constant" | "wsd"
   # "step" schedule:
-  MILESTONES: [2000, 8000]   # Steps at which LR is multiplied by LR_GAMMA
+  MILESTONES: [2000, 8000]   # Training-batch milestones; LR refreshed at the next successful optimizer update
   LR_GAMMA: 0.1              # Multiplicative LR decay factor
   # "wsd" (warmup-stable-decay) schedule:
   WSD_DECAY_RATIO: 0.1       # Fraction of total steps spent in cosine decay phase
@@ -93,7 +93,7 @@ TRAINING:
   GRADIENT_CLIPPING_NORM: 1.0         # Max gradient norm; 0 = disabled
   GRADIENT_CHECKPOINTING: false       # Trade compute for memory via activation checkpointing
   GRADIENT_CHECKPOINT_SEGMENTS: 16   # Number of checkpointing segments (only when GRADIENT_CHECKPOINTING: true)
-  GRADIENT_ACCUMULATION_STEPS: 1     # Accumulate gradients over N steps before update
+  GRADIENT_ACCUMULATION_STEPS: 1     # Average N generator-backward batches per update; final partial group is averaged and applied
 
   MIXED_PRECISION: false     # Enable automatic mixed precision (AMP)
 
@@ -184,7 +184,7 @@ ADVERSARIAL:
   D_WARMUP_STEPS: 0          # Warmup duration in discriminator updates
   D_START_TRAINING: 0        # Step at which discriminator training begins
   D_GAMMA: 0.1              # Final discriminator LR / D_LEARNING_RATE (0–1); cosine decay after warmup
-  D_N_CRITIC: 1              # Discriminator updates per generator update
+  D_N_CRITIC: 1              # Adversarial-phase batch interval between generator backwards; critic updates each batch, generator accumulates separately
   D_GP_WEIGHT: 10.0          # Gradient penalty coefficient λ
   D_DOWNSCALE_FACTOR: 1      # Positive integer divisor of critic input height/width; area resize includes conditions/seeds and gradient penalty
   LPIPS_WEIGHT: 0.0          # Additional full-resolution LPIPS weight, including warmup; 0 disables; uses TRAINING.LPIPS_NET
