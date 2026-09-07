@@ -71,9 +71,9 @@ TRAINING:
   BATCH_SIZE: 12             # Grids per optimisation step (must be > 0)
   STEPS: 10000               # Total training steps
 
-  LOSS_FN: "mse"             # "mse" | "l1" | "lpips" | "vggstyle" | "p_ce" | "i_ce" | "overflow"
+  LOSS_FN: "mse"             # LOSS_FN_REGISTRY key: "mse" | "l1" | "lpips" | "vgg" | "p_ce" | "i_ce" | "overflow"
   OVERFLOW_LOSS: false       # Add overflow penalty to the loss
-  OVERFLOW_WEIGHT: 1.0       # Weight for the overflow penalty term
+  OVERFLOW_WEIGHT: 1.0       # Nonnegative overflow penalty weight (mse, l1, vgg, i_ce, overflow; AE/VQVAE reconstruction)
 
   LEARNING_RATE: 0.002       # Peak learning rate (0 < lr ≤ 1)
   OPTIMIZER_BETAS: [0.9, 0.999]
@@ -130,11 +130,11 @@ PATTERN_POOL:
   ENABLED: false
   TIMESERIES_POOL: false     # Pool stores full timeseries (for sequence datasets)
   POOL_SIZE: 1024            # Number of states stored in the pool
-  POOL_DELAY: 1000           # Steps before pool sampling begins
+  POOL_DELAY: 1000           # Nonnegative step at which pool sampling begins; 0 = immediate
   POOL_START_RATIO: 0.5      # Initial scheduled fraction of each batch drawn from the pool (0.0–1.0)
   POOL_END_RATIO: 0.5        # Final fraction drawn from the pool, reached at TRAINING.STEPS by linear scheduling (0.0–1.0)
   POOL_DMG_RATIO: 0.0        # Fraction of pool samples damaged before use (0.0–1.0)
-  POOL_DMG_DELAY: null       # Steps before damage is applied; null = immediate
+  POOL_DMG_DELAY: null       # Positive step at which damage begins; null = immediate
   POOL_MUTATION_RATIO: 0.0   # Fraction of pool samples mutated (0.0–1.0)
 
 # -----------------------------------------------------------------------------
@@ -181,13 +181,13 @@ ADVERSARIAL:
   D_IN_CHANNELS: 4           # Discriminator input channels (must match generator output)
   D_FEATURES: [64, 128, 256, 512]  # Channel progression in the discriminator
   D_LEARNING_RATE: 0.001
-  D_WARMUP_STEPS: 0
+  D_WARMUP_STEPS: 0          # Warmup duration in discriminator updates
   D_START_TRAINING: 0        # Step at which discriminator training begins
-  D_GAMMA: 0.1               # LR decay factor for discriminator scheduler
+  D_GAMMA: 0.1              # Final discriminator LR / D_LEARNING_RATE (0–1); cosine decay after warmup
   D_N_CRITIC: 1              # Discriminator updates per generator update
   D_GP_WEIGHT: 10.0          # Gradient penalty coefficient λ
-  D_DOWNSCALE_FACTOR: 1      # Spatially downscale inputs to discriminator by this factor
-  LPIPS_WEIGHT: 0.0          # LPIPS perceptual term weight in generator loss
+  D_DOWNSCALE_FACTOR: 1      # Positive integer divisor of critic input height/width; area resize includes conditions/seeds and gradient penalty
+  LPIPS_WEIGHT: 0.0          # Additional full-resolution LPIPS weight, including warmup; 0 disables; uses TRAINING.LPIPS_NET
   ADV_WEIGHT: 1.0            # Adversarial term weight in generator loss
   RECON_WEIGHT: 1.0          # Reconstruction term weight in generator loss
   SEED_TO_CRITIC: false      # Pass seed image as extra channel to discriminator (conditional GAN)

@@ -1,10 +1,13 @@
 from pathlib import Path
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class StrictModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    """Reject unknown fields and non-finite floats; validate defaults like user input."""
+
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False, validate_default=True)
 
 
 class PerceptionConfig(StrictModel):
@@ -27,12 +30,12 @@ class PerceptionConfig(StrictModel):
     """
 
     MODE: str = "conv"
-    KERNEL_SIZE: int = 3
-    DILATION: int = 1
-    OUT_CHANNEL: int = 80
+    KERNEL_SIZE: int = Field(default=3, gt=0)
+    DILATION: int = Field(default=1, gt=0)
+    OUT_CHANNEL: int = Field(default=80, gt=0)
     # attention / mh_attention
-    NUM_HEADS: int = 4
-    EMBED_DIM: int = 128
+    NUM_HEADS: int = Field(default=4, gt=0)
+    EMBED_DIM: int = Field(default=128, gt=0)
     USE_REL_POS_BIAS: bool = True
     # mh_attention only
     USE_LAYER_NORM: bool = True
@@ -47,12 +50,15 @@ class PerceptionConfig(StrictModel):
             raise ValueError(f"MODE must be one of {sorted(PERCEPTION_REGISTRY)}.")
         return value
 
-    @field_validator("OUT_CHANNEL")
-    @classmethod
-    def check_out_channel(cls, value):
-        if value <= 0:
-            raise ValueError("OUT_CHANNEL must be a positive integer.")
-        return value
+    @model_validator(mode="after")
+    def check_attention_dimensions(self):
+        if self.MODE in {"attention", "mh_attention"}:
+            if self.KERNEL_SIZE % 2 == 0:
+                raise ValueError("Attention KERNEL_SIZE must be odd.")
+            dimension = self.OUT_CHANNEL if self.MODE == "attention" else self.EMBED_DIM
+            if dimension % self.NUM_HEADS:
+                raise ValueError("Attention projection dimension must be divisible by NUM_HEADS.")
+        return self
 
 
 class ModelConfig(StrictModel):
@@ -84,23 +90,23 @@ class ModelConfig(StrictModel):
     """
     ARCHITECTURE: str = "residual"
     NAME: str = "MLP"
-    HIDDEN_CHANNELS: list[int] = [64]
-    CHANNEL_N: int = 16
-    CHANNEL_OUT: int | None = None
+    HIDDEN_CHANNELS: list[Annotated[int, Field(gt=0)]] = Field(default_factory=lambda: [64])
+    CHANNEL_N: int = Field(default=16, gt=0)
+    CHANNEL_OUT: int | None = Field(default=None, gt=0)
     USE_POSITIONAL_EMBEDDINGS: bool = False
     LIVING_MASK: bool = False
-    LIVING_MASK_INDEX: int = 3
-    NOISE_INJECTION: float = 0.0
+    LIVING_MASK_INDEX: int = Field(default=3, ge=0)
+    NOISE_INJECTION: float = Field(default=0.0, ge=0, le=1)
     FINAL_ACTIVATION: bool = False
     CLAMP_OUTPUT: bool = False
     CLAMP_OUTPUT_MIN: float = -1.0
     CLAMP_OUTPUT_MAX: float = 1.0
-    FIRE_RATE: float = 0.5
+    FIRE_RATE: float = Field(default=0.5, ge=0, le=1)
 
-    RESNET_BLOCKS: int = 2
+    RESNET_BLOCKS: int = Field(default=2, ge=0)
 
     PERCEPTIONS: list[PerceptionConfig] = Field(
-        default_factory=lambda: [PerceptionConfig()]
+        default_factory=lambda: [PerceptionConfig()], min_length=1
     )
 
     @field_validator("ARCHITECTURE")
@@ -109,20 +115,6 @@ class ModelConfig(StrictModel):
         from nca.core.models.model_factory import MODEL_REGISTRY
         if value not in MODEL_REGISTRY:
             raise ValueError(f"MODEL.ARCHITECTURE must be one of {sorted(MODEL_REGISTRY)}.")
-        return value
-
-    @field_validator("CHANNEL_N")
-    @classmethod
-    def check_channel_n(cls, value):
-        if value <= 0:
-            raise ValueError("CHANNEL_N must be a positive integer.")
-        return value
-
-    @field_validator("NOISE_INJECTION")
-    @classmethod
-    def check_noise(cls, value):
-        if not (0 <= value <= 1):
-            raise ValueError("NOISE_INJECTION must be between 0 and 1.")
         return value
 
     @field_validator("NAME")
@@ -151,6 +143,14 @@ class ModelConfig(StrictModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def check_architecture_settings(self):
+        if self.NAME == "ResNet" and not self.HIDDEN_CHANNELS:
+            raise ValueError("ResNet requires at least one HIDDEN_CHANNELS entry.")
+        if self.CLAMP_OUTPUT_MIN > self.CLAMP_OUTPUT_MAX:
+            raise ValueError("CLAMP_OUTPUT_MIN cannot exceed CLAMP_OUTPUT_MAX.")
+        return self
+
 
 class TrainingConfig(StrictModel):
     """Hyperparameters for the main CA training loop.
@@ -159,7 +159,7 @@ class TrainingConfig(StrictModel):
         BATCH_SIZE: Number of grids per optimisation step.
         STEPS: Total number of training steps.
         LOSS_FN: Reconstruction loss key from ``LOSS_FN_REGISTRY`` —
-            ``mse``, ``l1``, ``lpips``, ``vggstyle``, ``p_ce``, ``i_ce``, ``overflow``.
+            ``mse``, ``l1``, ``lpips``, ``vgg``, ``p_ce``, ``i_ce``, ``overflow``.
         OVERFLOW_LOSS: Add an overflow penalty to the loss.
         OVERFLOW_WEIGHT: Weight applied to the overflow penalty term.
         LEARNING_RATE: Initial learning rate.
@@ -175,31 +175,34 @@ class TrainingConfig(StrictModel):
         EVOLVE_MODE: Rollout strategy key from ``EVOLVER_REGISTRY``.
     """
 
-    BATCH_SIZE: int = 12
-    STEPS: int = 10000
+    BATCH_SIZE: int = Field(default=12, gt=0)
+    # -1 is the existing infinite-dataloader sentinel.
+    STEPS: Annotated[int, Field(gt=0)] | Literal[-1] = 10000
     LOSS_FN: str = "mse"
     OVERFLOW_LOSS: bool = False
-    LEARNING_RATE: float = 0.002
-    WARMUP_STEPS: int = 2000
-    LR_SCHEDULE_MODE: str = "step"
-    MILESTONES: list[int] = [2000, 8000]
-    LR_GAMMA: float = 0.1
-    OPTIMIZER_BETAS: list[float] = [0.9, 0.999]
-    ITER_N_MIN: int = 32
-    ITER_N_MAX: int = 64
-    GRADIENT_CLIPPING_NORM: float = 1.0
+    LEARNING_RATE: float = Field(default=0.002, gt=0, le=1)
+    WARMUP_STEPS: int = Field(default=2000, ge=0)
+    LR_SCHEDULE_MODE: Literal["step", "cosine", "constant", "wsd"] = "step"
+    MILESTONES: list[Annotated[int, Field(ge=0)]] = Field(default_factory=lambda: [2000, 8000])
+    LR_GAMMA: float = Field(default=0.1, ge=0)
+    OPTIMIZER_BETAS: list[Annotated[float, Field(ge=0, lt=1)]] = Field(
+        default_factory=lambda: [0.9, 0.999], min_length=2, max_length=2
+    )
+    ITER_N_MIN: int = Field(default=32, gt=0)
+    ITER_N_MAX: int = Field(default=64, gt=0)
+    GRADIENT_CLIPPING_NORM: float = Field(default=1.0, ge=0)
     GRADIENT_CHECKPOINTING: bool = False
-    GRADIENT_CHECKPOINT_SEGMENTS: int = 16
-    GRADIENT_ACCUMULATION_STEPS: int = 1
+    GRADIENT_CHECKPOINT_SEGMENTS: int = Field(default=16, gt=0)
+    GRADIENT_ACCUMULATION_STEPS: int = Field(default=1, gt=0)
     MIXED_PRECISION: bool = False
-    OVERFLOW_WEIGHT: float = 1.0
-    LPIPS_NET: str = "alex"
-    VGG_PROJ_N: int = 32
+    OVERFLOW_WEIGHT: float = Field(default=1.0, ge=0)
+    LPIPS_NET: Literal["alex", "vgg", "squeeze"] = "alex"
+    VGG_PROJ_N: int = Field(default=32, gt=0)
     TRAINER_TYPE: str | None = None
     EVOLVE_MODE: str = "base"
     # WSD schedule — stable phase fills the gap between warmup and decay
-    WSD_DECAY_RATIO: float = 0.1
-    WSD_MIN_LR_RATIO: float = 0.0
+    WSD_DECAY_RATIO: float = Field(default=0.1, ge=0, le=1)
+    WSD_MIN_LR_RATIO: float = Field(default=0.0, ge=0, le=1)
 
     @field_validator("TRAINER_TYPE")
     @classmethod
@@ -232,49 +235,35 @@ class TrainingConfig(StrictModel):
             raise ValueError(f"LOSS_FN must be one of {sorted(LOSS_FN_REGISTRY)}.")
         return value
 
-    @field_validator("LR_SCHEDULE_MODE")
-    @classmethod
-    def check_lr_schedule_mode(cls, value):
-        if value not in ["step", "cosine", "constant", "wsd"]:
-            raise ValueError(
-                'LR_SCHEDULE_MODE must be "step", "cosine", "constant", or "wsd".'
-            )
-        return value
+    @model_validator(mode="after")
+    def check_rollout_lengths(self):
+        if self.ITER_N_MIN > self.ITER_N_MAX:
+            raise ValueError("ITER_N_MIN cannot be greater than ITER_N_MAX")
+        if self.GRADIENT_CHECKPOINTING and self.GRADIENT_CHECKPOINT_SEGMENTS > self.ITER_N_MIN:
+            raise ValueError("GRADIENT_CHECKPOINT_SEGMENTS cannot exceed ITER_N_MIN when checkpointing is enabled.")
+        return self
 
-    @field_validator("BATCH_SIZE")
-    @classmethod
-    def check_batch_size(cls, value):
-        if value <= 0:
-            raise ValueError("BATCH_SIZE must be greater than zero.")
-        return value
-
-    @field_validator("LEARNING_RATE")
-    @classmethod
-    def check_learning_rate(cls, value):
-        if value <= 0 or value > 1:
-            raise ValueError("LEARNING_RATE must be between 0 and 1.")
-        return value
-
-    @field_validator("GRADIENT_CHECKPOINT_SEGMENTS")
-    @classmethod
-    def check_checkpoint_segments(cls, value):
-        if value <= 0:
-            raise ValueError("GRADIENT_CHECKPOINT_SEGMENTS must be positive.")
-        return value
+    @model_validator(mode="after")
+    def check_wsd_phase_lengths(self):
+        if self.LR_SCHEDULE_MODE == "wsd":
+            decay_steps = int(self.STEPS * self.WSD_DECAY_RATIO)
+            if self.WARMUP_STEPS + decay_steps > self.STEPS:
+                raise ValueError("WSD warmup and decay phases cannot exceed TRAINING.STEPS.")
+        return self
 
 
 class DatasetConfig(StrictModel):
     NAME: str = "emoji"
-    DATAROOT: Path = None
-    DATASET_SAMPLE_PATH: Path = None
+    DATAROOT: Path | None = None
+    DATASET_SAMPLE_PATH: Path | None = None
     DROP_LAST_BATCH: bool = True
-    TARGET_SIZE: int = 64
-    TARGET_PADDING: int = 0
-    EMOJIS: list[str] = []  # ["🙂", "🌈", "🦅", "🐧", "🌻", "🍕"]
-    HISTORY_N: int = 1
+    TARGET_SIZE: int = Field(default=64, gt=0)
+    TARGET_PADDING: int = Field(default=0, ge=0)
+    EMOJIS: list[Annotated[str, Field(min_length=1)]] = Field(default_factory=list)
+    HISTORY_N: int = Field(default=1, gt=0)
     REVERSE_HISTORY_SEED: bool = False
-    NUM_WORKERS: int = 0
-    SEED_SIZE: int = 1  # Size of the cross pattern for GrowingMNISTDataset
+    NUM_WORKERS: int = Field(default=0, ge=0)
+    SEED_SIZE: int = Field(default=1, gt=0)  # Cross size for GrowingMNISTDataset
     ENABLE_ROTATION: bool = (
         False  # Enable rotation transformations in GrowingMNISTDataset
     )
@@ -285,25 +274,27 @@ class DatasetConfig(StrictModel):
 
     @field_validator("DATASET_SAMPLE_PATH")
     @classmethod
-    def check_path_exists(cls, value: Path):
-        if not value.exists():
+    def check_path_exists(cls, value: Path | None):
+        if value is not None and not value.exists():
             raise ValueError(f"Dataset sample path does not exist: {value}")
         return value
 
-    @field_validator("TARGET_SIZE")
+    @field_validator("NAME")
     @classmethod
-    def check_target_size(cls, value):
-        if value <= 0:
-            raise ValueError("TARGET_SIZE must be greater than zero.")
+    def check_dataset_name(cls, value):
+        from nca.data.dataset_factory import DATASET_REGISTRY
+
+        if value not in DATASET_REGISTRY:
+            raise ValueError(f"DATASET.NAME must be one of {sorted(DATASET_REGISTRY)}.")
         return value
 
 
 class CFGConfig(StrictModel):
     ENABLED: bool = False
-    DROPOUT_PROB: float = 0.1
-    NULL_CONDITION_TYPE: str = "zeros"
+    DROPOUT_PROB: float = Field(default=0.1, ge=0, le=1)
+    NULL_CONDITION_TYPE: Literal["zeros", "learned"] = "zeros"
     GOAL_CHANNELS: bool = False
-    PRESERVE_CHANNELS: list[int] = Field(
+    PRESERVE_CHANNELS: list[Annotated[int, Field(ge=0)]] = Field(
         default_factory=list
     )  # Channels to NOT zero out during CFG
 
@@ -321,27 +312,13 @@ class SamplePoolConfig(StrictModel):
 
     ENABLED: bool = False
     TIMESERIES_POOL: bool = False
-    POOL_SIZE: int = 1024
-    POOL_DELAY: int = 1000
-    POOL_START_RATIO: float = 0.5
-    POOL_END_RATIO: float = 0.5
-    POOL_DMG_RATIO: float = 0.0
-    POOL_DMG_DELAY: int = None
-    POOL_MUTATION_RATIO: float = 0.0
-
-    @field_validator("POOL_START_RATIO", "POOL_END_RATIO", "POOL_DMG_RATIO")
-    @classmethod
-    def check_ratio(cls, value):
-        if not (0 <= value <= 1):
-            raise ValueError("Ratios must be between 0 and 1.")
-        return value
-
-    @field_validator("POOL_SIZE", "POOL_DELAY", "POOL_DMG_DELAY")
-    @classmethod
-    def check_positive(cls, value):
-        if value <= 0:
-            raise ValueError("Values must be positive.")
-        return value
+    POOL_SIZE: int = Field(default=1024, gt=0)
+    POOL_DELAY: int = Field(default=1000, ge=0)
+    POOL_START_RATIO: float = Field(default=0.5, ge=0, le=1)
+    POOL_END_RATIO: float = Field(default=0.5, ge=0, le=1)
+    POOL_DMG_RATIO: float = Field(default=0.0, ge=0, le=1)
+    POOL_DMG_DELAY: int | None = Field(default=None, gt=0)  # None means immediate.
+    POOL_MUTATION_RATIO: float = Field(default=0.0, ge=0, le=1)
 
 
 class LatentConfig(StrictModel):
@@ -374,30 +351,28 @@ class LatentConfig(StrictModel):
 
     ENABLED: bool = False
     ENCODER_TYPE: str = "AE"
-    LATENT_AE_STEPS: int = 10000
-    LATENT_AE_WARMUP_STEPS: int = 2000
-    LATENT_AE_LR: float = 0.001
-    LATENT_AE_IN_CHANNEL: int = 4
-    LATENT_AE_OUT_CHANNEL: int = 4
-    LATENT_AE_CHANNEL: int = 64
-    LATENT_AE_COMPRESSION: int = 3
-    LATENT_AE_LOG_INTERVAL: int = 2500
-    LATENT_AE_SAVE_INTERVAL: int = 5000
+    LATENT_AE_STEPS: int = Field(default=10000, gt=0)
+    LATENT_AE_WARMUP_STEPS: int = Field(default=2000, ge=0)
+    LATENT_AE_LR: float = Field(default=0.001, gt=0)
+    LATENT_AE_IN_CHANNEL: int = Field(default=4, gt=0)
+    LATENT_AE_OUT_CHANNEL: int = Field(default=4, gt=0)
+    LATENT_AE_CHANNEL: int = Field(default=64, gt=0)
+    LATENT_AE_COMPRESSION: int = Field(default=3, ge=1)
+    LATENT_AE_LOG_INTERVAL: int = Field(default=2500, gt=0)
+    LATENT_AE_SAVE_INTERVAL: int = Field(default=5000, gt=0)
     APPLY_DAMAGE: bool = False
-    AE_CHECKPOINT: Path = None
-    VAE_KL_BETA: float = 1.0
-    VAE_BASE_CHANNELS: int = 64
-    VAE_NUM_DOWNSAMPLES: int = 5
-    VAE_NORM_GROUPS: int = 32
-    VAE_KL_WARMUP_STEPS: int = 0
-    VAE_BATCH_SIZE: int = 18
-    VAE_RECON_LOSS_TYPE: str = (
-        "l1"  # Type of reconstruction loss for VAE: "l1" or "mse"
-    )
-    VAE_RECON_LOSS_WEIGHT: float = 1.0  # Weight for reconstruction loss in VAE
-    VAE_VGG_LOSS_WEIGHT: float = 1.0  # Weight for VGG loss in VAE
-    VQVAE_NUM_EMBEDDINGS: int = 512
-    VQVAE_COMMITMENT_COST: float = 0.25
+    AE_CHECKPOINT: Path | None = None
+    VAE_KL_BETA: float = Field(default=1.0, ge=0)
+    VAE_BASE_CHANNELS: int = Field(default=64, gt=0)
+    VAE_NUM_DOWNSAMPLES: int = Field(default=5, ge=0)
+    VAE_NORM_GROUPS: int = Field(default=32, gt=0)
+    VAE_KL_WARMUP_STEPS: int = Field(default=0, ge=0)
+    VAE_BATCH_SIZE: int = Field(default=18, gt=0)
+    VAE_RECON_LOSS_TYPE: Literal["l1", "mse"] = "l1"
+    VAE_RECON_LOSS_WEIGHT: float = Field(default=1.0, ge=0)
+    VAE_VGG_LOSS_WEIGHT: float = Field(default=1.0, ge=0)
+    VQVAE_NUM_EMBEDDINGS: int = Field(default=512, gt=0)
+    VQVAE_COMMITMENT_COST: float = Field(default=0.25, ge=0)
 
     @field_validator("ENCODER_TYPE")
     @classmethod
@@ -426,16 +401,8 @@ class TorchCompileConfig(StrictModel):
     """
 
     ENABLED: bool = False
-    MODE: str = "default"
+    MODE: Literal["default", "max-autotune-no-cudagraphs"] = "default"
     DEBUG: bool = False
-
-    @field_validator("MODE")
-    @classmethod
-    def check_mode(cls, value):
-        allowed = {"default", "max-autotune-no-cudagraphs"}
-        if value not in allowed:
-            raise ValueError(f"TORCH_COMPILE.MODE must be one of {sorted(allowed)}.")
-        return value
 
 
 class ReproducibilityConfig(StrictModel):
@@ -480,13 +447,18 @@ class AdversarialConfig(StrictModel):
         D_LEARNING_RATE: Discriminator learning rate.
         D_START_TRAINING: Step at which discriminator training begins; allows
             the generator to warm up before the critic is introduced.
-        D_WARMUP_STEPS: Linear LR warm-up steps for the discriminator.
-        D_GAMMA: LR decay factor for the discriminator scheduler.
+        D_WARMUP_STEPS: Linear LR warm-up duration in discriminator updates.
+        D_GAMMA: Final discriminator LR divided by D_LEARNING_RATE (0 to 1).
+            After warmup, cosine decay spans the remaining updates following
+            D_START_TRAINING; skipped AMP updates do not advance the schedule.
         D_N_CRITIC: Discriminator updates per generator update.
         D_GP_WEIGHT: Gradient penalty coefficient λ in the WGAN-GP loss.
         D_DOWNSCALE_FACTOR: Spatially downscale inputs to the discriminator
-            by this factor before the forward pass.
-        LPIPS_WEIGHT: Weight for the LPIPS perceptual term in the generator loss.
+            by this positive integer factor using area resizing. Applies to
+            real, fake and gradient-penalty inputs, including conditions/seeds.
+        LPIPS_WEIGHT: Weight for an additional full-resolution LPIPS term in
+            the generator loss, including generator warmup; 0 disables it.
+            Uses TRAINING.LPIPS_NET. Adds to RECON_WEIGHT if LOSS_FN is lpips.
         ADV_WEIGHT: Weight for the adversarial term in the generator loss.
         RECON_WEIGHT: Weight for the reconstruction term in the generator loss.
         SEED_TO_CRITIC: Pass the seed image as an additional channel to the
@@ -494,18 +466,20 @@ class AdversarialConfig(StrictModel):
     """
 
     ENABLED: bool = False
-    D_IN_CHANNELS: int = 4
-    D_FEATURES: list[int] = [64, 128, 256, 512]
-    D_LEARNING_RATE: float = 0.001
-    D_START_TRAINING: int = 0
-    D_WARMUP_STEPS: int = 0
-    D_GAMMA: float = 0.1
-    D_N_CRITIC: int = 1
-    D_GP_WEIGHT: float = 10.0
-    D_DOWNSCALE_FACTOR: int = 1
-    LPIPS_WEIGHT: float = 0.0
-    ADV_WEIGHT: float = 1.0
-    RECON_WEIGHT: float = 1.0
+    D_IN_CHANNELS: int = Field(default=4, gt=0)
+    D_FEATURES: list[Annotated[int, Field(gt=0)]] = Field(
+        default_factory=lambda: [64, 128, 256, 512], min_length=1
+    )
+    D_LEARNING_RATE: float = Field(default=0.001, gt=0)
+    D_START_TRAINING: int = Field(default=0, ge=0)
+    D_WARMUP_STEPS: int = Field(default=0, ge=0)
+    D_GAMMA: float = Field(default=0.1, ge=0, le=1)
+    D_N_CRITIC: int = Field(default=1, gt=0)
+    D_GP_WEIGHT: float = Field(default=10.0, ge=0)
+    D_DOWNSCALE_FACTOR: int = Field(default=1, ge=1)
+    LPIPS_WEIGHT: float = Field(default=0.0, ge=0)
+    ADV_WEIGHT: float = Field(default=1.0, ge=0)
+    RECON_WEIGHT: float = Field(default=1.0, ge=0)
     SEED_TO_CRITIC: bool = False
 
 
@@ -565,15 +539,17 @@ class LoggingConfig(StrictModel):
     TRAIN_NAME: str = "TEST"
     FOLDER_NAME: str | None = None
     DEBUG: bool = False
-    LOG_INTERVAL: int = 100
-    SAVE_INTERVAL: int = 10000
-    INTERMEDIATE_LOGGING_STEPS: list[int] = [5, 15, 25]
+    LOG_INTERVAL: int = Field(default=100, gt=0)
+    SAVE_INTERVAL: int = Field(default=10000, gt=0)
+    INTERMEDIATE_LOGGING_STEPS: list[Annotated[int, Field(ge=0)]] = Field(
+        default_factory=lambda: [5, 15, 25]
+    )
     OBSERVERS: list[ObserverConfig] = Field(default_factory=list)
 
 
 class Config(StrictModel):
-    SEED: int = -1
-    DEVICE: str = "cuda"
+    SEED: int = Field(default=-1, ge=-1, le=2**32 - 1)
+    DEVICE: str = Field(default="cuda", min_length=1)
 
     LOGGING: LoggingConfig = Field(default_factory=LoggingConfig)
     MODEL: ModelConfig = Field(default_factory=ModelConfig)
@@ -588,28 +564,12 @@ class Config(StrictModel):
         default_factory=ReproducibilityConfig
     )
 
-    COND_DIM: int | None = None
-    IM_HEIGHT: int | None = None
-    IM_WIDTH: int | None = None
+    COND_DIM: int | None = Field(default=None, ge=0)
+    IM_HEIGHT: int | None = Field(default=None, gt=0)
+    IM_WIDTH: int | None = Field(default=None, gt=0)
 
     def model_post_init(self, __context) -> None:
         """Perform cross-field validation after model initialization."""
-        # Validate latent training configuration
-        if self.LATENT_TRAINING.ENABLED:
-            if self.LATENT_TRAINING.LATENT_AE_COMPRESSION < 1:
-                raise ValueError("LATENT_AE_COMPRESSION must be >= 1")
-
-        # Validate adversarial training configuration
-        if self.ADVERSARIAL.ENABLED:
-            if self.ADVERSARIAL.D_LEARNING_RATE <= 0:
-                raise ValueError(
-                    "When ADVERSARIAL.ENABLED=True, D_LEARNING_RATE must be > 0"
-                )
-            if len(self.ADVERSARIAL.D_FEATURES) == 0:
-                raise ValueError(
-                    "When ADVERSARIAL.ENABLED=True, D_FEATURES cannot be empty"
-                )
-
         # Validate dataset-specific requirements
         if self.DATASET.NAME in ["emoji"] and len(self.DATASET.EMOJIS) == 0:
             raise ValueError(
@@ -620,14 +580,6 @@ class Config(StrictModel):
             raise ValueError(
                 f"Dataset '{self.DATASET.NAME}' requires DATAROOT to be specified"
             )
-
-        # Validate pattern pool configuration
-        if self.PATTERN_POOL.ENABLED and self.PATTERN_POOL.POOL_SIZE <= 0:
-            raise ValueError("When PATTERN_POOL.ENABLED=True, POOL_SIZE must be > 0")
-
-        # Validate training configuration consistency
-        if self.TRAINING.ITER_N_MIN > self.TRAINING.ITER_N_MAX:
-            raise ValueError("ITER_N_MIN cannot be greater than ITER_N_MAX")
 
         if any(
             step >= self.TRAINING.ITER_N_MIN

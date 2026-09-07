@@ -55,7 +55,7 @@ LATENT_ENCODER_REGISTRY = {
             latent_channels=cfg.LATENT_TRAINING.LATENT_AE_CHANNEL,
             compression_level=cfg.LATENT_TRAINING.LATENT_AE_COMPRESSION,
         ).to(device),
-        None if inference_only else ReconstructionLoss(overflow_loss=cfg.TRAINING.OVERFLOW_LOSS),
+        None if inference_only else ReconstructionLoss(overflow_loss=cfg.TRAINING.OVERFLOW_LOSS, overflow_weight=cfg.TRAINING.OVERFLOW_WEIGHT),
         None,
     ),
     "VAE": lambda cfg, device, inference_only: (
@@ -83,7 +83,7 @@ LATENT_ENCODER_REGISTRY = {
             num_downsamples=cfg.LATENT_TRAINING.VAE_NUM_DOWNSAMPLES,
             norm_groups=cfg.LATENT_TRAINING.VAE_NORM_GROUPS,
         ).to(device),
-        None if inference_only else ReconstructionLoss(overflow_loss=cfg.TRAINING.OVERFLOW_LOSS),
+        None if inference_only else ReconstructionLoss(overflow_loss=cfg.TRAINING.OVERFLOW_LOSS, overflow_weight=cfg.TRAINING.OVERFLOW_WEIGHT),
         None,
     ),
 }
