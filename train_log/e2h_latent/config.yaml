@@ -1,8 +1,13 @@
-PROJECT_NAME: "e2h_latent"                # Name of the project
-TRAIN_NAME: "e2h_latent"                  # Name of the training run
 SEED: 42                                  # Random seed
 DEVICE: "cuda"  
-WANDB: true                               # Flag to enable logging to Weights & Biases
+
+LOGGING:
+  PROJECT_NAME: "e2h_latent"                # Name of the project
+  TRAIN_NAME: "e2h_latent"                  # Name of the training run
+  WANDB: true                               # Flag to enable logging to Weights & Biases
+  LOG_INTERVAL: 100
+  SAVE_INTERVAL: 50000
+  INTERMEDIATE_LOGGING_STEPS: [5, 10, 15]
 
 MODEL:
   NAME: "MLP"
@@ -25,12 +30,9 @@ TRAINING:
   LR_SCHEDULE_MODE: "cosine"
   OVERFLOW_LOSS: true
   MILESTONES: [3000, 85000]
-  GAMMA: 0.1
-  LOG_INTERVAL: 100
-  SAVE_INTERVAL: 50000
+  LR_GAMMA: 0.1
   ITER_N_MIN: 20
   ITER_N_MAX: 26
-  INTERMEDIATE_LOGGING_STEPS: [5, 10, 15]
   GRADIENT_CLIPPING_NORM: 1.0
   GRADIENT_CHECKPOINTING: false
 
@@ -84,10 +86,9 @@ LATENT_TRAINING:
   VAE_KL_WARMUP_STEPS: 30000             
   APPLY_DAMAGE: False
   VAE_VGG_LOSS_WEIGHT: 1.0
-  VAE_L1_LOSS_WEIGHT: 1.0
+  VAE_RECON_LOSS_WEIGHT: 1.0
   VAE_RECON_LOSS_TYPE: "mse"
 
 
   
-
 
