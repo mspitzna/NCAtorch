@@ -309,6 +309,16 @@ class CFGConfig(StrictModel):
 
 
 class SamplePoolConfig(StrictModel):
+    """Persistent pool settings.
+
+    POOL_START_RATIO and POOL_END_RATIO are the initial and final fractions
+    of each batch sampled from the pool, scheduled linearly over TRAINING.STEPS.
+    POOL_DELAY gates sampling until that training step. For timeseries pools,
+    replacement additionally requires a matching previous frame.
+    POOL_DMG_RATIO is the fraction of successfully reused samples to damage,
+    rounded down to a whole number of samples. These ratios do not limit commits.
+    """
+
     ENABLED: bool = False
     TIMESERIES_POOL: bool = False
     POOL_SIZE: int = 1024
