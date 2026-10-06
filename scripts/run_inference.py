@@ -33,7 +33,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from nca.utils.config import load_config
 from nca.core.models.model_factory import compile_model, create_model
-from nca.core.models.latent_encoder_factory import create_latent_encoder, get_checkpoint_filename
+from nca.core.models.latent_encoder_factory import load_latent_encoder
 from nca.data.dataset_factory import create_dataset
 from nca.data.datasets.base_dataset import NCADataset
 
@@ -159,6 +159,18 @@ def parse_args():
         "--train_split", action="store_true",
         help="Sample from the training split instead of validation.",
     )
+    parser.add_argument(
+        "--cut_vertical", default="",
+        help="Comma-separated step numbers at which the right half of the state is zeroed (vertical cut).",
+    )
+    parser.add_argument(
+        "--cut_horizontal", default="",
+        help="Comma-separated step numbers at which the bottom half of the state is zeroed (horizontal cut).",
+    )
+    parser.add_argument(
+        "--state_only", action="store_true",
+        help="Save a second video with only the first sample's state (no seed/target rows, no labels).",
+    )
     return parser.parse_args()
 
 
@@ -178,6 +190,21 @@ def main():
 
     iter_n = args.iter_n if args.iter_n is not None else config.TRAINING.ITER_N_MAX
     output_path = args.output or os.path.join(log_dir, "inference.mp4")
+    state_only_path = os.path.join(
+        os.path.dirname(output_path),
+        os.path.splitext(os.path.basename(output_path))[0] + "_state.mp4",
+    )
+
+    def _parse_steps(s: str) -> set[int]:
+        return {int(x) for x in s.split(",") if x.strip()}
+
+    cut_vertical_steps   = _parse_steps(args.cut_vertical)
+    cut_horizontal_steps = _parse_steps(args.cut_horizontal)
+
+    if cut_vertical_steps:
+        print(f"Cut vertical (zero right half) at steps: {sorted(cut_vertical_steps)}")
+    if cut_horizontal_steps:
+        print(f"Cut horizontal (zero bottom half) at steps: {sorted(cut_horizontal_steps)}")
 
     print(f"Config     : {config_path}")
     print(f"Device     : {device}")
@@ -204,7 +231,7 @@ def main():
     # Determine freeze_channels if model outputs fewer channels than state
     channel_n = config.MODEL.CHANNEL_N
     channel_out = getattr(config.MODEL, 'CHANNEL_OUT', channel_n)
-    if channel_out < channel_n:
+    if not config.LATENT_TRAINING.ENABLED and channel_out < channel_n:
         # Freeze the first (channel_n - channel_out) channels
         freeze_channels = channel_n - channel_out - 1
         print(f"Freezing channels 0-{freeze_channels} (model outputs {channel_out} of {channel_n} channels)")
@@ -224,15 +251,7 @@ def main():
     # --- Latent autoencoder ---
     ae = None
     if config.LATENT_TRAINING.ENABLED:
-        ae, _, _ = create_latent_encoder(config, device, inference_only=True)
-        ae_ckpt = os.path.join(
-            log_dir, "ae_checkpoints",
-            get_checkpoint_filename(config.LATENT_TRAINING.ENCODER_TYPE),
-        )
-        ae.load_state_dict(torch.load(ae_ckpt, map_location=device, weights_only=True))
-        ae.to(device)
-        ae.eval()
-        print(f"AE         : {ae_ckpt}")
+        ae = load_latent_encoder(config, device, folder_name=log_dir)
 
     # --- Pre-color fixed tensors (seed and target never change) ---
     has_coloring = isinstance(dataset, NCADataset)
@@ -267,13 +286,18 @@ def main():
     # Seed and target RGB are constant — compute once
     x0_rgb, _, target_rgb = colorize_state(x0_cpu)
 
+    def _state_frame(x_rgb: torch.Tensor) -> np.ndarray:
+        """Single-sample state as a plain (H, W, 3) uint8 array."""
+        return (x_rgb[0].permute(1, 2, 0).cpu().numpy() * 255).clip(0, 255).astype(np.uint8)
+
     # --- Evolve & collect frames ---
     video_frames = []
+    state_only_frames = []
     state = seed.clone()
 
     with torch.no_grad():
         if ae is not None:
-            enc = ae.encode(state)
+            enc = ae.encode(state[:, :config.LATENT_TRAINING.LATENT_AE_IN_CHANNEL])
             state = enc[0] if isinstance(enc, tuple) else enc  # use mu for VAE
 
         # Frame 0 = initial seed (decoded if latent)
@@ -283,15 +307,30 @@ def main():
             [("Seed", x0_rgb), ("Step 0", x_rgb), ("Target", target_rgb)],
             batch_size=args.batch_size,
         ))
+        if args.state_only:
+            state_only_frames.append(_state_frame(x_rgb))
 
         for step in range(1, iter_n + 1):
             state, _ = model(state, cond, freeze_channels=freeze_channels)
+
+            # Apply spatial cuts before visualization and next step
+            if step in cut_vertical_steps:
+                mid = state.shape[-1] // 2   # W dimension
+                state = state.clone()
+                state[..., mid:] = 0.0
+            if step in cut_horizontal_steps:
+                mid = state.shape[-2] // 2   # H dimension
+                state = state.clone()
+                state[..., mid:, :] = 0.0
+
             vis = ae.decode(state).detach().cpu() if ae is not None else state.detach().cpu()
             _, x_rgb, _ = colorize_state(vis)
             video_frames.append(_make_frame(
                 [("Seed", x0_rgb), (f"Step {step}", x_rgb), ("Target", target_rgb)],
                 batch_size=args.batch_size,
             ))
+            if args.state_only:
+                state_only_frames.append(_state_frame(x_rgb))
             if step % max(1, iter_n // 10) == 0:
                 print(f"  step {step:4d}/{iter_n}")
 
@@ -308,6 +347,12 @@ def main():
     with imageio.get_writer(output_path, fps=args.fps, macro_block_size=1) as writer:
         for frame in video_frames:
             writer.append_data(frame)
+
+    if args.state_only:
+        print(f"Saving {len(state_only_frames)} frames → {state_only_path}")
+        with imageio.get_writer(state_only_path, fps=args.fps, macro_block_size=1) as writer:
+            for frame in state_only_frames:
+                writer.append_data(frame)
 
     print("Done.")
 
