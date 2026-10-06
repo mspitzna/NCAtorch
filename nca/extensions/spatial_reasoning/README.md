@@ -213,19 +213,3 @@ loss_name = task_config.LOSS
 For an explicitly supplied section, `config.EXTENSIONS.SPATIAL_REASONING`
 returns the same typed settings. `settings(config)` returns default settings when the
 section is omitted; those defaults do not select a task loss.
-
-## Good to know
-
-- **Training data:** Sudoku training puzzles are generated from the first 990K
-  solution grids in `BartekPog/mnist-sudoku`. Test puzzles come from the last 10K
-  solutions and are cached in `datasets/sudoku_test/` after the first run.
-  Mazes come from `sapientinc/maze-30x30-hard-1k`.
-- **Your own checkpoints:** loading requires matching parameter names and shapes.
-  Pass a matching model config via `--config`; the loader also accepts the
-  `_orig_mod.` prefix produced by `torch.compile`.
-- **Maze sizes:** the Prim mazes are built at odd sizes (20 → 21, 30 → 31).
-  Other maze sizes only work for models without positional embeddings, which
-  is the case in the maze config.
-- **Not supported:** latent-space training, adversarial training and CFG.
-- **Checking the setup:** `uv run pytest nca/extensions/spatial_reasoning/tests tests`
-  checks the tasks, factory integration, configuration and host framework.
