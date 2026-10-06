@@ -1,0 +1,84 @@
+# Spatial reasoning — shortest paths in 30x30 mazes (paper Tab. 3 and 9, App. A.5).
+# Default perception: aNCA with three DCNv2 heads (kernel 3, 5, 3). Swap in a
+# commented block for the baselines.
+
+SEED: 42                     # Five training runs are reported
+DEVICE: "cuda"
+
+LOGGING:
+  WANDB: false
+  PROJECT_NAME: "spatial_reasoning_maze"
+  TRAIN_NAME: "maze_anca"
+  LOG_INTERVAL: 1000
+  SAVE_INTERVAL: 100000
+  INTERMEDIATE_LOGGING_STEPS: [6, 12]
+
+MODEL:
+  NAME: "MLP"
+  HIDDEN_CHANNELS: [128]
+  CHANNEL_N: 24              # Channel 0 is the path; 23 hidden channels
+  USE_POSITIONAL_EMBEDDINGS: false
+  FIRE_RATE: 0.5
+  LIVING_MASK: false
+  CLAMP_OUTPUT: true
+  PERCEPTIONS:               # aNCA (256k parameters)
+    - {MODE: "anca_deform", KERNEL_SIZE: 3, OUT_CHANNEL: 128}
+    - {MODE: "anca_deform", KERNEL_SIZE: 5, OUT_CHANNEL: 128}
+    - {MODE: "anca_deform", KERNEL_SIZE: 3, OUT_CHANNEL: 128}
+
+  # NCA w. 3x3 / 5x5 Conv. (50k / 105k):
+  # PERCEPTIONS:
+  #   - {MODE: "conv", KERNEL_SIZE: 3, OUT_CHANNEL: 128}   # 5 for the larger kernel
+  #
+  # NCA w. Dilated Conv. (150k):
+  # PERCEPTIONS:
+  #   - {MODE: "conv", KERNEL_SIZE: 3, DILATION: 1, OUT_CHANNEL: 128}
+  #   - {MODE: "conv", KERNEL_SIZE: 5, DILATION: 2, OUT_CHANNEL: 128}
+  #
+  # NCA w. R/C/B Conv. (280k): row/column kernels span the 30-cell grid
+  # PERCEPTIONS:
+  #   - {MODE: "conv", KERNEL_SIZE: 3, OUT_CHANNEL: 128}
+  #   - {MODE: "row_conv", KERNEL_SIZE: 30, OUT_CHANNEL: 128}
+  #   - {MODE: "column_conv", KERNEL_SIZE: 30, OUT_CHANNEL: 128}
+  #
+  # NCA w. DCNv1 (236k):
+  # PERCEPTIONS:
+  #   - {MODE: "anca_deform_v1", KERNEL_SIZE: 3, OUT_CHANNEL: 128}
+  #   - {MODE: "anca_deform_v1", KERNEL_SIZE: 5, OUT_CHANNEL: 128}
+  #   - {MODE: "anca_deform_v1", KERNEL_SIZE: 3, OUT_CHANNEL: 128}
+
+TRAINING:
+  TRAINER_TYPE: "spatial_reasoning"
+  BATCH_SIZE: 64
+  STEPS: 1000
+  LEARNING_RATE: 0.001       # AdamW
+  LR_SCHEDULE_MODE: "wsd"    # warmup / stable / decay = 10% / 80% / 10%
+  WARMUP_STEPS: 100
+  WSD_DECAY_RATIO: 0.1
+  WSD_MIN_LR_RATIO: 0.0
+  GRADIENT_CLIPPING_NORM: 1.0
+  ITER_N_MIN: 18             # Rollout length T ~ U[18, 24]
+  ITER_N_MAX: 24
+  MIXED_PRECISION: true
+
+DATASET:
+  NAME: "maze"
+  NUM_WORKERS: 4
+  DROP_LAST_BATCH: true
+
+PATTERN_POOL:
+  ENABLED: true
+  POOL_SIZE: 512
+  POOL_DELAY: 1
+  POOL_START_RATIO: 0.5
+  POOL_END_RATIO: 0.5
+
+EXTENSIONS:
+  SPATIAL_REASONING:
+    LOSS: "maze_path"         # weights in the task subsection below
+    WEIGHT_DECAY: 0.0001
+    MAZE:
+      HF_DATASET_ID: "sapientinc/maze-30x30-hard-1k"   # 1K train / 1K test
+      BCE_WEIGHT: 1.0
+      DICE_WEIGHT: 1.0
+      LENGTH_WEIGHT: 0.05

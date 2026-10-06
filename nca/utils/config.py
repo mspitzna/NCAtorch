@@ -3,6 +3,11 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_serializer, field_validator, model_validator
 
+from nca.extensions.spatial_reasoning.config import (
+    SpatialReasoningConfig,
+    validate_spatial_reasoning_config,
+)
+
 
 class StrictModel(BaseModel):
     """Reject unknown fields and non-finite floats; validate defaults like user input."""
@@ -592,6 +597,12 @@ class LoggingConfig(StrictModel):
     OBSERVERS: list[ObserverConfig] = Field(default_factory=list)
 
 
+class ExtensionsConfig(StrictModel):
+    """Explicitly declared settings for framework extensions."""
+
+    SPATIAL_REASONING: SpatialReasoningConfig | None = None
+
+
 class Config(StrictModel):
     SEED: int = Field(default=-1, ge=-1, le=2**32 - 1)
     DEVICE: str = Field(default="cuda", min_length=1)
@@ -608,6 +619,7 @@ class Config(StrictModel):
     REPRODUCIBILITY: ReproducibilityConfig = Field(
         default_factory=ReproducibilityConfig
     )
+    EXTENSIONS: ExtensionsConfig = Field(default_factory=ExtensionsConfig)
 
     COND_DIM: int | None = Field(default=None, ge=0)
     IM_HEIGHT: int | None = Field(default=None, gt=0)
@@ -633,6 +645,8 @@ class Config(StrictModel):
             raise ValueError(
                 "All LOGGING.INTERMEDIATE_LOGGING_STEPS must be < TRAINING.ITER_N_MIN"
             )
+
+        validate_spatial_reasoning_config(self)
 
     def set_cond_dim(self, cond_dim: int):
         self.COND_DIM = cond_dim

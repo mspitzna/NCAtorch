@@ -1,0 +1,74 @@
+# Spatial reasoning — global color balance on 32x32 black/white images (paper Tab. 4, App. A.6).
+# No condition and no per-pixel supervision. Default perception: aNCA with
+# three DCNv2 heads. Swap in a commented block for the baselines.
+
+SEED: 42                     # Three training runs are reported
+DEVICE: "cuda"
+
+LOGGING:
+  WANDB: false
+  PROJECT_NAME: "spatial_reasoning_color_balance"
+  TRAIN_NAME: "color_balance_anca"
+  LOG_INTERVAL: 1000
+  SAVE_INTERVAL: 25000
+  INTERMEDIATE_LOGGING_STEPS: [4, 8]
+
+MODEL:
+  NAME: "MLP"
+  HIDDEN_CHANNELS: [128]
+  CHANNEL_N: 24              # Channel 0 is the image; 23 hidden channels
+  USE_POSITIONAL_EMBEDDINGS: false
+  FIRE_RATE: 0.5
+  LIVING_MASK: false
+  CLAMP_OUTPUT: true
+  PERCEPTIONS:               # aNCA (152k parameters)
+    - {MODE: "anca_deform", KERNEL_SIZE: 3, OUT_CHANNEL: 128}
+    - {MODE: "anca_deform", KERNEL_SIZE: 3, OUT_CHANNEL: 128}
+    - {MODE: "anca_deform", KERNEL_SIZE: 3, OUT_CHANNEL: 128}
+
+  # NCA w. 3x3 / 5x5 Conv. (48k / 100k):
+  # PERCEPTIONS:
+  #   - {MODE: "conv", KERNEL_SIZE: 3, OUT_CHANNEL: 128}   # 5 for the larger kernel
+  #
+  # NCA w. DCNv1 (147k):
+  # PERCEPTIONS:
+  #   - {MODE: "anca_deform_v1", KERNEL_SIZE: 3, OUT_CHANNEL: 128}
+  #   - {MODE: "anca_deform_v1", KERNEL_SIZE: 3, OUT_CHANNEL: 128}
+  #   - {MODE: "anca_deform_v1", KERNEL_SIZE: 3, OUT_CHANNEL: 128}
+
+TRAINING:
+  TRAINER_TYPE: "spatial_reasoning"
+  BATCH_SIZE: 16
+  STEPS: 25000
+  LEARNING_RATE: 0.0003      # AdamW
+  LR_SCHEDULE_MODE: "wsd"    # warmup / stable / decay = 10% / 80% / 10%
+  WARMUP_STEPS: 2500
+  WSD_DECAY_RATIO: 0.1
+  WSD_MIN_LR_RATIO: 0.0
+  GRADIENT_CLIPPING_NORM: 1.0
+  ITER_N_MIN: 12             # Rollout length T ~ U[12, 24]
+  ITER_N_MAX: 24
+
+DATASET:
+  NAME: "color_balance"
+  TARGET_SIZE: 32            # Image size
+  NUM_WORKERS: 4
+  DROP_LAST_BATCH: true
+
+PATTERN_POOL:
+  ENABLED: true
+  POOL_SIZE: 512
+  POOL_DELAY: 1
+  POOL_START_RATIO: 0.5
+  POOL_END_RATIO: 0.5
+
+EXTENSIONS:
+  SPATIAL_REASONING:
+    LOSS: "color_balance"     # weights in the task subsection below
+    WEIGHT_DECAY: 0.0
+    COLOR_BALANCE:
+      BIAS_MIN: 0.1            # Seed white fraction ~ U[0.1, 0.9]
+      BIAS_MAX: 0.9
+      WHITE_RATIO: 0.5         # Prescribed 50/50 balance
+      COUNT_WEIGHT: 1.0
+      SATURATION_WEIGHT: 0.01

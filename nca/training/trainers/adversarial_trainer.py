@@ -31,6 +31,8 @@ class AdversarialTrainer(BaseTrainer):
         ``ADVERSARIAL.D_GP_WEIGHT`` — gradient-penalty coefficient.
     """
     
+    USES_FRAMEWORK_LOSS = False
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.current_step = 0  # Initialize current step counter

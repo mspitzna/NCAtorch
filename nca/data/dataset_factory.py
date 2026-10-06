@@ -157,6 +157,9 @@ DATASET_REGISTRY = {
     "celeba": _create_celeba,
 }
 
+from nca.extensions.spatial_reasoning.registration import register_datasets as register_spatial_reasoning_datasets
+register_spatial_reasoning_datasets(DATASET_REGISTRY)
+
 
 def _seed_worker(worker_id):
     worker_seed = torch.initial_seed() % 2**32

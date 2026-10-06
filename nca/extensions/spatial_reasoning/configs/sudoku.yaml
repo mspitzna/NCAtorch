@@ -1,0 +1,87 @@
+# Spatial reasoning — Sudoku on the array representation (paper Tab. 1, App. A.3).
+# The same checkpoints are reused for MNIST Sudoku (Tab. 2) through the codec.
+# Default perception: aNCA with H=3 DCNv2 heads. Swap in a commented block for
+# the baselines; everything else stays fixed across perception variants.
+
+SEED: 42                     # Use 42..45 for the four reported training runs
+DEVICE: "cuda"
+
+LOGGING:
+  WANDB: false
+  PROJECT_NAME: "spatial_reasoning_sudoku"
+  TRAIN_NAME: "sudoku_anca"
+  LOG_INTERVAL: 1000
+  SAVE_INTERVAL: 100000
+  INTERMEDIATE_LOGGING_STEPS: [6, 12]
+
+MODEL:
+  NAME: "MLP"
+  HIDDEN_CHANNELS: [128]     # 1x1-conv MLP, one hidden layer
+  CHANNEL_N: 24              # 9 digit channels + 15 hidden channels
+  USE_POSITIONAL_EMBEDDINGS: true
+  FIRE_RATE: 1.0             # Every cell updates every step
+  LIVING_MASK: false
+  CLAMP_OUTPUT: true
+  PERCEPTIONS:               # aNCA: 3 DCNv2 heads (165k parameters)
+    - {MODE: "anca_deform", KERNEL_SIZE: 3, OUT_CHANNEL: 128}
+    - {MODE: "anca_deform", KERNEL_SIZE: 3, OUT_CHANNEL: 128}
+    - {MODE: "anca_deform", KERNEL_SIZE: 3, OUT_CHANNEL: 128}
+
+  # NCA w. 3x3 / 5x5 / 7x7 / 9x9 Conv. (50k / 105k / 189k / 300k):
+  # PERCEPTIONS:
+  #   - {MODE: "conv", KERNEL_SIZE: 3, OUT_CHANNEL: 128}   # 5, 7 or 9 for the larger kernels
+  #
+  # NCA w. R/C/B Conv. (145k): 3x3 conv + full-row + full-column convolutions
+  # PERCEPTIONS:
+  #   - {MODE: "conv", KERNEL_SIZE: 3, OUT_CHANNEL: 128}
+  #   - {MODE: "row_conv", KERNEL_SIZE: 9, OUT_CHANNEL: 128}
+  #   - {MODE: "column_conv", KERNEL_SIZE: 9, OUT_CHANNEL: 128}
+  #
+  # NCA w. Dilated Conv. (150k):
+  # PERCEPTIONS:
+  #   - {MODE: "conv", KERNEL_SIZE: 3, DILATION: 1, OUT_CHANNEL: 128}
+  #   - {MODE: "conv", KERNEL_SIZE: 5, DILATION: 2, OUT_CHANNEL: 128}
+  #
+  # NCA w. DCNv1 (159k): offsets only, no modulation
+  # PERCEPTIONS:
+  #   - {MODE: "anca_deform_v1", KERNEL_SIZE: 3, OUT_CHANNEL: 128}
+  #   - {MODE: "anca_deform_v1", KERNEL_SIZE: 3, OUT_CHANNEL: 128}
+  #   - {MODE: "anca_deform_v1", KERNEL_SIZE: 3, OUT_CHANNEL: 128}
+
+TRAINING:
+  TRAINER_TYPE: "spatial_reasoning"
+  BATCH_SIZE: 128
+  STEPS: 10000
+  LEARNING_RATE: 0.0004      # AdamW
+  LR_SCHEDULE_MODE: "wsd"    # 1000 warmup steps, stable, then cosine decay over the last 40% to 0
+  WARMUP_STEPS: 1000
+  WSD_DECAY_RATIO: 0.4
+  WSD_MIN_LR_RATIO: 0.0
+  GRADIENT_CLIPPING_NORM: 1.0
+  ITER_N_MIN: 18             # Rollout length T ~ U[18, 24]
+  ITER_N_MAX: 24
+  MIXED_PRECISION: true
+
+DATASET:
+  NAME: "sudoku"
+  NUM_WORKERS: 8
+  DROP_LAST_BATCH: true
+
+PATTERN_POOL:
+  ENABLED: true
+  POOL_SIZE: 512
+  POOL_DELAY: 1
+  POOL_START_RATIO: 0.5
+  POOL_END_RATIO: 0.5
+
+EXTENSIONS:
+  SPATIAL_REASONING:
+    LOSS: "sudoku_constraint" # weights in the task subsection below
+    WEIGHT_DECAY: 0.0
+    SUDOKU:
+      DIFFICULTY: [0.01, 0.81] # Fraction of removed cells, sampled per puzzle
+      TRAIN_SAMPLES: 1000000
+      CONSTRAINT_WEIGHT: 1.0
+      GIVEN_WEIGHT: 1.0
+      ONEHOT_WEIGHT: 0.1
+      SOFTMAX_TEMPERATURE: 0.25

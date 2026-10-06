@@ -96,4 +96,3 @@ def create_model(config: Config, cond_dim, img_height, img_width):
             f"Invalid MODEL.ARCHITECTURE '{architecture}'. Valid options: {sorted(MODEL_REGISTRY)}"
         )
     return MODEL_REGISTRY[architecture](config, cond_dim, img_height, img_width)
-

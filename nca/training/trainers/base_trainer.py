@@ -49,6 +49,9 @@ class BaseTrainer(ABC):
         accumulation_steps (int): Gradient accumulation window.
     """
 
+    # Override when _initialize_additional_components builds the training loss.
+    USES_FRAMEWORK_LOSS = True
+
     def __init__(
         self,
         ca_model,
