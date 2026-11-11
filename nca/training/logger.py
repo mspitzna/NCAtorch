@@ -1,12 +1,15 @@
 import os
 import shutil
-from datetime import datetime
-import yaml
+
 import numpy as np
-import wandb
 import torch
-from nca.utils.visualization import visualize_batch
+import wandb
+import yaml
+
 from nca.utils.config import Config
+from nca.utils.paths import create_run_folder
+from nca.utils.visualization import visualize_batch
+
 
 class Logger:
     _instance = None
@@ -21,18 +24,26 @@ class Logger:
         self.x_log = None
         self.target_log = None
         self.x_state_logs = {}
-        
+
         if self.use_wandb:
             # If using pydantic, you might use config.model_dump(), else use __dict__
-            flat_config = config.model_dump() if hasattr(config, "model_dump") else config.__dict__
+            flat_config = (
+                config.model_dump()
+                if hasattr(config, "model_dump")
+                else config.__dict__
+            )
             if wandb.run is None:
-                wandb.init(project=config.LOGGING.PROJECT_NAME, name=config.LOGGING.TRAIN_NAME, config=flat_config)
+                wandb.init(
+                    project=config.LOGGING.PROJECT_NAME,
+                    name=config.LOGGING.TRAIN_NAME,
+                    config=flat_config,
+                )
             else:
                 wandb.config.update(flat_config, allow_val_change=True)
 
             if model is not None:
                 wandb.watch(model, log="all", log_freq=self.config.LOGGING.LOG_INTERVAL)
-        
+
         # Persist the actual in-memory config (after overrides) into the output folder.
         # mode="json" coerces Paths to strings for YAML serialization.
         config_dump = config.model_dump(mode="json", exclude_none=True)
@@ -57,19 +68,16 @@ class Logger:
 
     def _create_output_folder(self, config_path):
         if self.config.LOGGING.FOLDER_NAME is None:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_folder = os.path.join("train_log", f"{self.config.LOGGING.TRAIN_NAME}_{timestamp}")
-            os.makedirs(output_folder, exist_ok=True)
-            os.makedirs(os.path.join(output_folder, "imgs"), exist_ok=True)
+            output_folder = create_run_folder(self.config.LOGGING.TRAIN_NAME)
             shutil.copy(
                 config_path,
                 os.path.join(output_folder, "config.yaml"),
                 follow_symlinks=True,
             )
-            return output_folder
         else:
-            os.makedirs(os.path.join(self.config.LOGGING.FOLDER_NAME, "imgs"), exist_ok=True)
-            return self.config.LOGGING.FOLDER_NAME
+            output_folder = self.config.LOGGING.FOLDER_NAME
+        os.makedirs(os.path.join(output_folder, "imgs"), exist_ok=True)
+        return output_folder
 
     def log_metrics(self, step):
         """
@@ -77,7 +85,7 @@ class Logger:
         and sent to wandb (if enabled).
         """
         agg_metrics = self._get_aggregated_metrics()
-        
+
         # Log to wandb if enabled
         if self.use_wandb:
             wandb.log({**agg_metrics, "Iteration": step}, step=step)
@@ -109,12 +117,22 @@ class Logger:
             step,
             plot=False,
             save_path=os.path.join(self.output_folder, "imgs"),
-            grayscale=(True if self.config.DATASET.NAME == "moving_mnist" else False)
+            grayscale=(True if self.config.DATASET.NAME == "moving_mnist" else False),
         )
         save_path = os.path.join(self.output_folder, "imgs", f"sample_{step}.png")
-        
+
         if self.use_wandb:
-            wandb.log({"Images": [wandb.Image(grid, caption=f"Step {step} - {self.config.LOGGING.TRAIN_NAME}")]}, step=step)
+            wandb.log(
+                {
+                    "Images": [
+                        wandb.Image(
+                            grid,
+                            caption=f"Step {step} - {self.config.LOGGING.TRAIN_NAME}",
+                        )
+                    ]
+                },
+                step=step,
+            )
         else:
             print(f"Images saved at {save_path}", flush=True)
 
@@ -141,7 +159,7 @@ class Logger:
 
     def get_state_logs(self):
         return self.x_state_logs
-    
+
     def set_state_logs(self, x_state_logs):
         self.x_state_logs = x_state_logs
 
@@ -155,14 +173,13 @@ class Logger:
                     float_values.append(v.cpu().detach().item())
                 else:
                     float_values.append(v)
-            
+
             # If there's only one value, no need to calculate mean
             if len(float_values) == 1:
                 aggregated[k] = float_values[0]
             else:
                 aggregated[k] = np.mean(float_values)
         return aggregated
-
 
     def reset_metrics(self):
         """
