@@ -16,6 +16,7 @@
 Key features:
 
 - 🎯 **Modular Architecture**: Composable perception and update modules for flexible experimentation
+- 🧩 **Extensions**: Add models, trainers, datasets, and rollout strategies through explicit registry hooks and typed `EXTENSIONS` settings — see the [extension guide](docs/extensions_guide.md)
 - 🎨 **Diverse Tasks**: Image generation (emoji, handbags), texture synthesis, self-classifying NCAs, video prediction
 - 🖼️ **Latent Space NCAs**: High-resolution generation (512x512) via pre-trained autoencoders
 - 🎮 **Interactive Visualization**: Real-time FastAPI-based web interface with painting tools
@@ -24,6 +25,8 @@ Key features:
 
 ## 📑 What's New
 
+- **[06-10-2026]** 🧠 Added extension: [Spatial Reasoning](nca/extensions/spatial_reasoning/README.md) to the framework, implementing *2D Spatial Reasoning with Adaptive Neural Cellular Automata* (NeurIPS 2026).
+- **[06-10-2026]** 🧩 Added a documented [extension workflow](docs/extensions_guide.md).
 - **[13-05-2026]** 🌀 Initial release of NCAtorch framework!
 
 ## Community Works
@@ -203,6 +206,13 @@ PATTERN_POOL:
 ### 🎬 Video Prediction
 - **Moving MNIST**: Temporal dynamics and video prediction
 
+### 🧠 Spatial Reasoning
+- **Sudoku and MNIST Sudoku**: Complete puzzles from numeric or handwritten clues
+- **Maze Solving**: Predict paths between start and goal
+- **Color Balance**: Balance the proportion of black and white cells
+
+See the [Spatial Reasoning extension](nca/extensions/spatial_reasoning/README.md) for training, evaluation, and example configurations.
+
 ### 🖼️ High-Resolution Generation
 - **Latent Space NCAs**: 512x512 generation via pre-trained autoencoders
 
@@ -216,6 +226,8 @@ nca-torch/
 │   │   └── losses/          # Loss functions
 │   ├── data/
 │   │   └── datasets/        # Dataset implementations
+│   ├── extensions/          # Extension implementations, registration hooks, and configs
+│   │   └── spatial_reasoning/
 │   ├── training/
 │   │   └── trainers/        # Training logic
 │   └── utils/               # Utilities and visualization
@@ -233,6 +245,8 @@ nca-torch/
 
 | Guide | Description |
 |-------|-------------|
+| [Extensions](docs/extensions_guide.md) | Add an extension with explicit registration hooks and typed configuration |
+| [Spatial Reasoning](nca/extensions/spatial_reasoning/README.md) | Train and evaluate Sudoku, MNIST Sudoku, maze, and color-balance NCAs |
 | [Custom Perception](docs/custom_perception_guide.md) | Add a new neighborhood operator |
 | [Custom Update Module](docs/custom_update_module_guide.md) | Add a new update architecture |
 | [Custom Dataset](docs/custom_dataset_guide.md) | Add a new dataset and wire it into the training pipeline |

@@ -51,7 +51,7 @@ ADVERSARIAL:
   D_LEARNING_RATE: 0.0005                   # Learning rate for the discriminator
   D_START_TRAINING: 1                    # Steps at which the discriminator starts training
   D_WARMUP_STEPS: 2000
-  D_GAMMA: 0.1                              # Learning rate decay factor for the discriminator
+  D_GAMMA: 0.1                              # Final discriminator learning rate / peak learning rate
   D_N_CRITIC: 1
   D_GP_WEIGHT: 10.0
   RECON_WEIGHT: 0.1                           # Weight for reconstruction loss in the generator's total loss
@@ -93,4 +93,3 @@ LATENT_TRAINING:
 
 
   
-

@@ -5,12 +5,7 @@ from nca.utils.config import Config
 class DataWrapper:
     def __init__(self, dataloader, config: Config):
         self.raw_dataloader = dataloader
-        if config.TRAINING.STEPS == -1:
-            # Infinite dataloader when epochs == -1
-            dataloader = infinite_dataloader(dataloader)
-        else:
-            # Finite dataloader based on total samples
-            dataloader = finite_dataloader(dataloader, config.TRAINING.STEPS)
+        dataloader = finite_dataloader(dataloader, config.TRAINING.STEPS)
 
         self.dataloader = dataloader
         self.config = config

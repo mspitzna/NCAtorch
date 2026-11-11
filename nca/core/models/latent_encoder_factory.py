@@ -1,3 +1,6 @@
+from pathlib import Path
+
+import torch
 import torch.nn as nn
 from nca.utils.config import Config
 from nca.core.models.auto_encoder.ae import AutoEncoder
@@ -55,7 +58,7 @@ LATENT_ENCODER_REGISTRY = {
             latent_channels=cfg.LATENT_TRAINING.LATENT_AE_CHANNEL,
             compression_level=cfg.LATENT_TRAINING.LATENT_AE_COMPRESSION,
         ).to(device),
-        None if inference_only else ReconstructionLoss(overflow_loss=cfg.TRAINING.OVERFLOW_LOSS),
+        None if inference_only else ReconstructionLoss(overflow_loss=cfg.TRAINING.OVERFLOW_LOSS, overflow_weight=cfg.TRAINING.OVERFLOW_WEIGHT),
         None,
     ),
     "VAE": lambda cfg, device, inference_only: (
@@ -83,7 +86,7 @@ LATENT_ENCODER_REGISTRY = {
             num_downsamples=cfg.LATENT_TRAINING.VAE_NUM_DOWNSAMPLES,
             norm_groups=cfg.LATENT_TRAINING.VAE_NORM_GROUPS,
         ).to(device),
-        None if inference_only else ReconstructionLoss(overflow_loss=cfg.TRAINING.OVERFLOW_LOSS),
+        None if inference_only else ReconstructionLoss(overflow_loss=cfg.TRAINING.OVERFLOW_LOSS, overflow_weight=cfg.TRAINING.OVERFLOW_WEIGHT),
         None,
     ),
 }
@@ -109,3 +112,26 @@ def get_checkpoint_filename(encoder_type: str) -> str:
             f"Unknown ENCODER_TYPE: '{encoder_type}'. Valid options: {sorted(LATENT_ENCODER_REGISTRY)}"
         )
     return f"{encoder_type.lower()}.pt"
+
+
+def load_latent_encoder(config: Config, device: str, folder_name=None):
+    """Load a frozen encoder, preferring the explicit checkpoint over the run folder."""
+    checkpoint = config.LATENT_TRAINING.AE_CHECKPOINT
+    if checkpoint is None:
+        folder_name = folder_name if folder_name is not None else config.LOGGING.FOLDER_NAME
+        if folder_name is None:
+            raise FileNotFoundError(
+                "Set LATENT_TRAINING.AE_CHECKPOINT or LOGGING.FOLDER_NAME to load an encoder."
+            )
+        checkpoint = Path(folder_name) / "ae_checkpoints" / get_checkpoint_filename(
+            config.LATENT_TRAINING.ENCODER_TYPE
+        )
+    if not Path(checkpoint).is_file():
+        raise FileNotFoundError(f"Autoencoder checkpoint not found: {checkpoint}")
+
+    model, _, _ = create_latent_encoder(config, device, inference_only=True)
+    model.load_state_dict(torch.load(checkpoint, weights_only=True, map_location=device))
+    model.requires_grad_(False)
+    model.eval()
+    print(f"Loaded AutoEncoder weights from {checkpoint}")
+    return model
