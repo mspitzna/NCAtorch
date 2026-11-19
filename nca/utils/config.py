@@ -16,7 +16,10 @@ class PerceptionConfig(StrictModel):
 
     Attributes:
         MODE: Neighbourhood operator.
-        KERNEL_SIZE: Spatial kernel size for convolution-based perceptions.
+        KERNEL_SIZE: Spatial kernel size for convolution-based perceptions —
+            either an int for a square kernel or a ``[height, width]`` pair.
+        PADDING_MODE: Padding used by convolution-based perceptions —
+            ``circular``, ``zeros``, ``reflect`` or ``replicate``.
         DILATION: Dilation factor for ``conv`` perception.
         OUT_CHANNEL: Number of output channels (filters) from this branch.
         NUM_HEADS: Attention heads for ``attention`` / ``mh_attention``.
@@ -27,7 +30,8 @@ class PerceptionConfig(StrictModel):
     """
 
     MODE: str = "conv"
-    KERNEL_SIZE: int = 3
+    KERNEL_SIZE: int | tuple[int, int] = 3
+    PADDING_MODE: str = "circular"
     DILATION: int = 1
     OUT_CHANNEL: int = 80
     # attention / mh_attention
@@ -53,6 +57,19 @@ class PerceptionConfig(StrictModel):
         if value <= 0:
             raise ValueError("OUT_CHANNEL must be a positive integer.")
         return value
+
+    @model_validator(mode="after")
+    def check_attention_kernel_size(self):
+        # Attention perceptions tile the neighbourhood in both dimensions and
+        # therefore require a square, odd kernel.
+        if self.MODE not in ("conv", "residual_conv") and isinstance(
+            self.KERNEL_SIZE, tuple
+        ):
+            raise ValueError(
+                f"MODE '{self.MODE}' requires a square KERNEL_SIZE, "
+                f"got {list(self.KERNEL_SIZE)}."
+            )
+        return self
 
 
 class ModelConfig(StrictModel):
@@ -82,6 +99,7 @@ class ModelConfig(StrictModel):
         RESNET_BLOCKS: Number of residual blocks (``ResNet`` only).
         PERCEPTIONS: List of perception branch configs; outputs are concatenated.
     """
+
     ARCHITECTURE: str = "residual"
     NAME: str = "MLP"
     HIDDEN_CHANNELS: list[int] = [64]
@@ -107,8 +125,11 @@ class ModelConfig(StrictModel):
     @classmethod
     def check_architecture(cls, value):
         from nca.core.models.model_factory import MODEL_REGISTRY
+
         if value not in MODEL_REGISTRY:
-            raise ValueError(f"MODEL.ARCHITECTURE must be one of {sorted(MODEL_REGISTRY)}.")
+            raise ValueError(
+                f"MODEL.ARCHITECTURE must be one of {sorted(MODEL_REGISTRY)}."
+            )
         return value
 
     @field_validator("CHANNEL_N")

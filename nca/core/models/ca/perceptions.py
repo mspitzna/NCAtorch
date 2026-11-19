@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
+
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+from torch import nn
 
 from nca.core.models.ca.deformable_conv import DeformableConv2d
 
@@ -14,6 +15,7 @@ class Perception(nn.Module, ABC):
     @abstractmethod
     def get_out_channel(self):
         pass
+
 
 class SobelPerception(nn.Module):
     def __init__(self, in_channel=16, device="cpu") -> None:
@@ -57,13 +59,17 @@ class SobelPerception(nn.Module):
         Output shape: [B, 4*in_channel, H, W]
         """
         # Apply circular padding manually for wraparound behavior
-        x_padded = F.pad(x, (1, 1, 1, 1), mode='circular')
+        x_padded = F.pad(x, (1, 1, 1, 1), mode="circular")
 
         # pylint: disable=not-callable
-        identity_out = F.conv2d(x_padded, self.f_identity, padding=0, groups=self.in_channel)
+        identity_out = F.conv2d(
+            x_padded, self.f_identity, padding=0, groups=self.in_channel
+        )
         grad_x = F.conv2d(x_padded, self.f_sobel_x, padding=0, groups=self.in_channel)
         grad_y = F.conv2d(x_padded, self.f_sobel_y, padding=0, groups=self.in_channel)
-        lap_out = F.conv2d(x_padded, self.f_laplacian, padding=0, groups=self.in_channel)
+        lap_out = F.conv2d(
+            x_padded, self.f_laplacian, padding=0, groups=self.in_channel
+        )
 
         # Concatenate along channel dimension
         return torch.cat([identity_out, grad_x, grad_y, lap_out], dim=1)
@@ -75,7 +81,14 @@ class SobelPerception(nn.Module):
 
 class ConvPerception(Perception):
     def __init__(
-        self, in_channel=16, out_channel=80, kernel_size=3, slope=0.2, dilation=1, device="cpu"
+        self,
+        in_channel=16,
+        out_channel=80,
+        kernel_size=3,
+        slope=0.2,
+        dilation=1,
+        device="cpu",
+        padding_mode="circular",
     ) -> None:
         super().__init__()
 
@@ -84,9 +97,16 @@ class ConvPerception(Perception):
         self.kernel_size = kernel_size
         self.device = device
         self.dilation = dilation
+        self.padding_mode = padding_mode
 
         self.conv = nn.Conv2d(
-            in_channel, out_channel, kernel_size=kernel_size, padding="same", stride=1, dilation=dilation, padding_mode="circular"
+            in_channel,
+            out_channel,
+            kernel_size=kernel_size,
+            padding="same",
+            stride=1,
+            dilation=dilation,
+            padding_mode=self.padding_mode,
         )
         self.lrelu = nn.LeakyReLU(slope)
 
@@ -100,13 +120,23 @@ class ConvPerception(Perception):
     def get_out_channel(self):
         return self.out_channel
 
+
 class DeformableConvPerception(Perception):
-    def __init__(self, in_channel=16, out_channel=80, kernel_size=3, slope=0.2, device="cpu"):
+    def __init__(
+        self,
+        in_channel=16,
+        out_channel=80,
+        kernel_size=3,
+        slope=0.2,
+        device="cpu",
+        padding_mode="circular",
+    ):
         super().__init__()
         self.in_channel = in_channel
         self.out_channel = out_channel
         self.kernel_size = kernel_size
         self.device = device
+        self.padding_mode = padding_mode
 
         # Compute padding for "same" spatial dimensions
         self.padding = (kernel_size - 1) // 2
@@ -117,6 +147,7 @@ class DeformableConvPerception(Perception):
             kernel_size=kernel_size,
             padding=self.padding,
             bias=False,
+            padding_mode=self.padding_mode,
         )
         self.lrelu = nn.LeakyReLU(slope)
 
@@ -127,24 +158,40 @@ class DeformableConvPerception(Perception):
 
     def get_out_channel(self):
         return self.out_channel
-    
+
     def visualize_deformation(self, x):
         return self.deform_conv.visualize_deformation(x)
 
 
 class ResidualConvPerception(Perception):
-    def __init__(self, in_channel=16, out_channel=80, kernel_size=3, device="cpu"):
+    def __init__(
+        self,
+        in_channel=16,
+        out_channel=80,
+        kernel_size=3,
+        device="cpu",
+        padding_mode="circular",
+    ):
         super().__init__()
         self.in_channel = in_channel
         self.out_channel = out_channel
         self.device = device
+        self.padding_mode = padding_mode
 
         self.conv1 = nn.Conv2d(
-            in_channel, out_channel, kernel_size=kernel_size, padding="same", padding_mode="circular"
+            in_channel,
+            out_channel,
+            kernel_size=kernel_size,
+            padding="same",
+            padding_mode=self.padding_mode,
         )
         self.relu = nn.ReLU()
         self.conv2 = nn.Conv2d(
-            out_channel, out_channel, kernel_size=kernel_size, padding="same", padding_mode="circular"
+            out_channel,
+            out_channel,
+            kernel_size=kernel_size,
+            padding="same",
+            padding_mode=self.padding_mode,
         )
         # Use a 1x1 convolution to match channels if necessary.
         self.skip = (
@@ -172,12 +219,13 @@ class AttentionPerception(Perception):
     Unlike ConvPerception which uses fixed filter weights, AttentionPerception computes
     dynamic attention weights based on the content (features) of each position and its neighbors.
     """
+
     def __init__(
         self,
         in_channel=16,
         out_channel=80,
         kernel_size=3,  # Defines the local neighborhood size
-        num_heads=4,    # Number of attention heads
+        num_heads=4,  # Number of attention heads
         slope=0.2,
         use_rel_pos_bias: bool = True,
     ) -> None:
@@ -194,7 +242,7 @@ class AttentionPerception(Perception):
         self.num_heads = num_heads
         self.head_dim = out_channel // num_heads
         self.padding = kernel_size // 2
-        self.scale = self.head_dim ** -0.5
+        self.scale = self.head_dim**-0.5
         self.neighborhood_size = kernel_size * kernel_size
         self.use_rel_pos_bias = use_rel_pos_bias
 
@@ -246,8 +294,12 @@ class AttentionPerception(Perception):
         q, k, v = qkv.chunk(3, dim=1)  # Each: (B, out_channel, H, W)
 
         # 2. Apply circular padding to K and V BEFORE reshaping (need 4D for circular padding)
-        k_padded = F.pad(k, (self.padding, self.padding, self.padding, self.padding), mode='circular')
-        v_padded = F.pad(v, (self.padding, self.padding, self.padding, self.padding), mode='circular')
+        k_padded = F.pad(
+            k, (self.padding, self.padding, self.padding, self.padding), mode="circular"
+        )
+        v_padded = F.pad(
+            v, (self.padding, self.padding, self.padding, self.padding), mode="circular"
+        )
 
         # Now reshape for multi-head attention: (B, num_heads, head_dim, H_pad, W_pad)
         H_pad, W_pad = H + 2 * self.padding, W + 2 * self.padding
@@ -260,8 +312,8 @@ class AttentionPerception(Perception):
         v_patches = []
         for i in range(self.kernel_size):
             for j in range(self.kernel_size):
-                k_patches.append(k_padded[:, :, :, i:i+H, j:j+W])
-                v_patches.append(v_padded[:, :, :, i:i+H, j:j+W])
+                k_patches.append(k_padded[:, :, :, i : i + H, j : j + W])
+                v_patches.append(v_padded[:, :, :, i : i + H, j : j + W])
 
         # Stack: (B, num_heads, head_dim, neighborhood_size, H, W)
         k_local = torch.stack(k_patches, dim=3)
@@ -278,11 +330,15 @@ class AttentionPerception(Perception):
         # -> sum over head_dim -> (B, num_heads, neighborhood_size, H, W)
         attn_scores = (q * k_local).sum(dim=2) * self.scale
         if self.rel_pos_bias is not None:
-            bias = self.rel_pos_bias.view(1, self.num_heads, self.neighborhood_size, 1, 1)
+            bias = self.rel_pos_bias.view(
+                1, self.num_heads, self.neighborhood_size, 1, 1
+            )
             attn_scores = attn_scores + bias
 
         # Softmax over neighborhood dimension
-        attn_weights = F.softmax(attn_scores, dim=2)  # (B, num_heads, neighborhood_size, H, W)
+        attn_weights = F.softmax(
+            attn_scores, dim=2
+        )  # (B, num_heads, neighborhood_size, H, W)
 
         # 4. Apply attention to values
         # attn_weights: (B, num_heads, 1, neighborhood_size, H, W)
@@ -302,17 +358,18 @@ class AttentionPerception(Perception):
     def get_out_channel(self):
         return self.out_channel
 
+
 class MultiHeadAttentionPerception(Perception):
     def __init__(
         self,
         in_channel: int = 16,
         out_channel: int = 80,
-        embed_dim: int = 128, # Increased default example
-        num_heads: int = 4,   # Example
+        embed_dim: int = 128,  # Increased default example
+        num_heads: int = 4,  # Example
         kernel_size: int = 3,
         slope: float = 0.2,
         use_layer_norm: bool = True,
-        include_ffn: bool = True, # Flag to include FFN
+        include_ffn: bool = True,  # Flag to include FFN
         ffn_expand_ratio: int = 4,  # How much to expand channels in FFN
         use_rel_pos_bias: bool = True,
     ) -> None:
@@ -331,7 +388,7 @@ class MultiHeadAttentionPerception(Perception):
         self.head_dim = embed_dim // num_heads
         self.kernel_size = kernel_size
         self.padding = kernel_size // 2
-        self.scale = self.head_dim ** -0.5
+        self.scale = self.head_dim**-0.5
         self.use_layer_norm = use_layer_norm
         self.include_ffn = include_ffn
         self.use_rel_pos_bias = use_rel_pos_bias
@@ -370,11 +427,10 @@ class MultiHeadAttentionPerception(Perception):
             self.ffn_conv2 = nn.Conv2d(ffn_hidden_dim, out_channel, kernel_size=1)
             # Optional: LayerNorm after FFN (before final activation)
             if self.use_layer_norm:
-                 self.norm_ffn = nn.LayerNorm(out_channel)
+                self.norm_ffn = nn.LayerNorm(out_channel)
 
         # --- Final Activation ---
         self.lrelu = nn.LeakyReLU(slope)
-
 
     def forward(self, x):
         b, c, h, w = x.shape
@@ -386,43 +442,61 @@ class MultiHeadAttentionPerception(Perception):
         v = self.value_conv(x)
 
         # 2. Apply circular padding and manual unfold for K, V
-        k_padded = F.pad(k, (self.padding, self.padding, self.padding, self.padding), mode='circular')
-        v_padded = F.pad(v, (self.padding, self.padding, self.padding, self.padding), mode='circular')
+        k_padded = F.pad(
+            k, (self.padding, self.padding, self.padding, self.padding), mode="circular"
+        )
+        v_padded = F.pad(
+            v, (self.padding, self.padding, self.padding, self.padding), mode="circular"
+        )
 
         # Manual unfold with circular padding
         k_patches = []
         v_patches = []
         for i in range(self.kernel_size):
             for j in range(self.kernel_size):
-                k_patch = k_padded[:, :, i:i+h, j:j+w]
-                v_patch = v_padded[:, :, i:i+h, j:j+w]
+                k_patch = k_padded[:, :, i : i + h, j : j + w]
+                v_patch = v_padded[:, :, i : i + h, j : j + w]
                 k_patches.append(k_patch)
                 v_patches.append(v_patch)
 
         # Stack patches and reshape for MHSA
-        k_stacked = torch.stack(k_patches, dim=2)  # (B, embed_dim, neighborhood_size, H, W)
-        v_stacked = torch.stack(v_patches, dim=2)  # (B, embed_dim, neighborhood_size, H, W)
+        k_stacked = torch.stack(
+            k_patches, dim=2
+        )  # (B, embed_dim, neighborhood_size, H, W)
+        v_stacked = torch.stack(
+            v_patches, dim=2
+        )  # (B, embed_dim, neighborhood_size, H, W)
 
         # 3. Reshape for MHSA
         q = q.view(b, self.num_heads, self.head_dim, h, w)
-        k_reshaped = k_stacked.view(b, self.num_heads, self.head_dim, self.neighborhood_size, h, w)
-        v_reshaped = v_stacked.view(b, self.num_heads, self.head_dim, self.neighborhood_size, h, w)
-        q_reshaped = q.unsqueeze(3) # (B, num_heads, head_dim, 1, H, W)
+        k_reshaped = k_stacked.view(
+            b, self.num_heads, self.head_dim, self.neighborhood_size, h, w
+        )
+        v_reshaped = v_stacked.view(
+            b, self.num_heads, self.head_dim, self.neighborhood_size, h, w
+        )
+        q_reshaped = q.unsqueeze(3)  # (B, num_heads, head_dim, 1, H, W)
 
         # 4. Attention Calculation
-        attn_scores = (q_reshaped * k_reshaped).sum(dim=2) * self.scale # Sum over head_dim
+        attn_scores = (q_reshaped * k_reshaped).sum(
+            dim=2
+        ) * self.scale  # Sum over head_dim
         if self.rel_pos_bias is not None:
-            bias = self.rel_pos_bias.view(1, self.num_heads, self.neighborhood_size, 1, 1)
+            bias = self.rel_pos_bias.view(
+                1, self.num_heads, self.neighborhood_size, 1, 1
+            )
             attn_scores = attn_scores + bias
-        attn_weights = F.softmax(attn_scores, dim=2) # Softmax over neighborhood
-        attn_weights_expanded = attn_weights.unsqueeze(2) # Add head_dim dim
+        attn_weights = F.softmax(attn_scores, dim=2)  # Softmax over neighborhood
+        attn_weights_expanded = attn_weights.unsqueeze(2)  # Add head_dim dim
 
         # 5. Value Aggregation
-        attended_v_heads = (attn_weights_expanded * v_reshaped).sum(dim=3) # Sum over neighborhood
-        attended_v = attended_v_heads.reshape(b, self.embed_dim, h, w) # Combine heads
+        attended_v_heads = (attn_weights_expanded * v_reshaped).sum(
+            dim=3
+        )  # Sum over neighborhood
+        attended_v = attended_v_heads.reshape(b, self.embed_dim, h, w)  # Combine heads
 
         # 6. Final Attention Projection
-        attn_output = self.proj_conv(attended_v) # Shape: (B, out_channel, H, W)
+        attn_output = self.proj_conv(attended_v)  # Shape: (B, out_channel, H, W)
         attn_output = attn_output + self.input_residual(x)
 
         # --- Optional: Post-Attention LayerNorm & Residual ---
@@ -430,10 +504,11 @@ class MultiHeadAttentionPerception(Perception):
         # x_res = x # Need to ensure x channels match out_channel if adding here
         # attn_output = attn_output + x_res # Example residual (needs channel matching)
         if self.use_layer_norm:
-            attn_output_norm = self.norm_attn(attn_output.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+            attn_output_norm = self.norm_attn(attn_output.permute(0, 2, 3, 1)).permute(
+                0, 3, 1, 2
+            )
         else:
             attn_output_norm = attn_output
-
 
         # --- Optional: FFN Block ---
         if self.include_ffn:
@@ -444,16 +519,18 @@ class MultiHeadAttentionPerception(Perception):
             out_ffn = self.ffn_activation(out_ffn)
             out_ffn = self.ffn_conv2(out_ffn)
             # Add residual connection
-            ffn_output = ffn_input + out_ffn # Add input to FFN output
+            ffn_output = ffn_input + out_ffn  # Add input to FFN output
             # Optional: LayerNorm after FFN residual
             if self.use_layer_norm:
-                ffn_output_norm = self.norm_ffn(ffn_output.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+                ffn_output_norm = self.norm_ffn(ffn_output.permute(0, 2, 3, 1)).permute(
+                    0, 3, 1, 2
+                )
             else:
-                 ffn_output_norm = ffn_output
+                ffn_output_norm = ffn_output
             final_output = ffn_output_norm
         else:
-             # If no FFN, use the output from attention/norm stage
-             final_output = attn_output_norm
+            # If no FFN, use the output from attention/norm stage
+            final_output = attn_output_norm
 
         # --- Final Activation ---
         out = self.lrelu(final_output)
@@ -463,18 +540,18 @@ class MultiHeadAttentionPerception(Perception):
     def get_out_channel(self):
         return self.out_channel
 
+
 class MultiPerception(Perception):
     def __init__(self, perceptions):
         super().__init__()
         # perceptions is a list of instantiated Perception modules.
         self.perceptions = nn.ModuleList(perceptions)
-    
+
     def forward(self, x):
         # Apply each perception to the input and concatenate along the channel dimension.
         outputs = [p(x) for p in self.perceptions]
         return torch.cat(outputs, dim=1)
-    
+
     def get_out_channel(self):
         # Total output channels is the sum of each perception's output channels.
         return sum(p.get_out_channel() for p in self.perceptions)
-    

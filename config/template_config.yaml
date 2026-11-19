@@ -53,7 +53,8 @@ MODEL:
   # Add multiple entries for parallel branches.
   PERCEPTIONS:
     - MODE: "conv"           # "conv" | "sobel" | "attention" | "mh_attention" | "residual_conv"
-      KERNEL_SIZE: 3         # Spatial kernel size (conv-based modes)
+      KERNEL_SIZE: 3         # Spatial kernel size: int or [height, width] pair
+      PADDING_MODE: "circular"  # "circular" | "zeros" | "reflect" | "replicate" (conv-based modes)
       DILATION: 1            # Dilation factor (conv mode)
       OUT_CHANNEL: 80        # Output channels from this branch (must be > 0)
       # attention / mh_attention only:
