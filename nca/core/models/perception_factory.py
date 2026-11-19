@@ -1,13 +1,13 @@
-from nca.utils.config import Config, PerceptionConfig
 from nca.core.models.ca.perceptions import (
     AttentionPerception,
     ConvPerception,
-    SobelPerception,
     DeformableConvPerception,
-    ResidualConvPerception,
-    MultiPerception,
     MultiHeadAttentionPerception,
+    MultiPerception,
+    ResidualConvPerception,
+    SobelPerception,
 )
+from nca.utils.config import Config
 
 # Registry of all available perception modules.
 #
@@ -27,23 +27,44 @@ from nca.core.models.ca.perceptions import (
 #   "residual_conv"  — residual convolutional block
 PERCEPTION_REGISTRY = {
     "conv": lambda in_ch, cfg, dev: ConvPerception(
-        in_ch, cfg.OUT_CHANNEL, cfg.KERNEL_SIZE, dilation=cfg.DILATION, device=dev
+        in_ch,
+        cfg.OUT_CHANNEL,
+        cfg.KERNEL_SIZE,
+        dilation=cfg.DILATION,
+        device=dev,
+        padding_mode=cfg.PADDING_MODE,
     ),
     "attention": lambda in_ch, cfg, dev: AttentionPerception(
-        in_ch, cfg.OUT_CHANNEL, cfg.KERNEL_SIZE,
-        num_heads=cfg.NUM_HEADS, use_rel_pos_bias=cfg.USE_REL_POS_BIAS,
+        in_ch,
+        cfg.OUT_CHANNEL,
+        cfg.KERNEL_SIZE,
+        num_heads=cfg.NUM_HEADS,
+        use_rel_pos_bias=cfg.USE_REL_POS_BIAS,
     ),
     "mh_attention": lambda in_ch, cfg, dev: MultiHeadAttentionPerception(
-        in_ch, cfg.OUT_CHANNEL, cfg.EMBED_DIM, cfg.NUM_HEADS, cfg.KERNEL_SIZE,
-        use_layer_norm=cfg.USE_LAYER_NORM, include_ffn=cfg.INCLUDE_FFN,
+        in_ch,
+        cfg.OUT_CHANNEL,
+        cfg.EMBED_DIM,
+        cfg.NUM_HEADS,
+        cfg.KERNEL_SIZE,
+        use_layer_norm=cfg.USE_LAYER_NORM,
+        include_ffn=cfg.INCLUDE_FFN,
         use_rel_pos_bias=cfg.USE_REL_POS_BIAS,
     ),
     "sobel": lambda in_ch, cfg, dev: SobelPerception(in_ch, dev),
     "deformable_conv": lambda in_ch, cfg, dev: DeformableConvPerception(
-        in_ch, cfg.OUT_CHANNEL, cfg.KERNEL_SIZE, device=dev
+        in_ch,
+        cfg.OUT_CHANNEL,
+        cfg.KERNEL_SIZE,
+        device=dev,
+        padding_mode=cfg.PADDING_MODE,
     ),
     "residual_conv": lambda in_ch, cfg, dev: ResidualConvPerception(
-        in_ch, cfg.OUT_CHANNEL, cfg.KERNEL_SIZE, device=dev
+        in_ch,
+        cfg.OUT_CHANNEL,
+        cfg.KERNEL_SIZE,
+        device=dev,
+        padding_mode=cfg.PADDING_MODE,
     ),
 }
 
@@ -58,9 +79,7 @@ def create_perception_module(config: Config, cond_dim: int, device: str):
         else config.LATENT_TRAINING.LATENT_AE_CHANNEL
     )
     in_channel = (
-        channel_n
-        + cond_dim
-        + (2 if config.MODEL.USE_POSITIONAL_EMBEDDINGS else 0)
+        channel_n + cond_dim + (2 if config.MODEL.USE_POSITIONAL_EMBEDDINGS else 0)
     )
 
     modules = [

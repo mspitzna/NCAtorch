@@ -1,7 +1,16 @@
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_serializer, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PositiveInt,
+    PrivateAttr,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 from nca.extensions.spatial_reasoning.config import (
     SpatialReasoningConfig,
@@ -12,7 +21,9 @@ from nca.extensions.spatial_reasoning.config import (
 class StrictModel(BaseModel):
     """Reject unknown fields and non-finite floats; validate defaults like user input."""
 
-    model_config = ConfigDict(extra="forbid", allow_inf_nan=False, validate_default=True)
+    model_config = ConfigDict(
+        extra="forbid", allow_inf_nan=False, validate_default=True
+    )
 
 
 class PerceptionConfig(StrictModel):
@@ -24,7 +35,10 @@ class PerceptionConfig(StrictModel):
 
     Attributes:
         MODE: Neighbourhood operator.
-        KERNEL_SIZE: Spatial kernel size for convolution-based perceptions.
+        KERNEL_SIZE: Spatial kernel size for convolution-based perceptions —
+            either an int for a square kernel or a ``[height, width]`` pair.
+        PADDING_MODE: Padding used by convolution-based perceptions —
+            ``circular``, ``zeros``, ``reflect`` or ``replicate``.
         DILATION: Dilation factor for ``conv`` perception.
         OUT_CHANNEL: Number of output channels (filters) from this branch.
         NUM_HEADS: Attention heads for ``attention`` / ``mh_attention``.
@@ -35,12 +49,13 @@ class PerceptionConfig(StrictModel):
     """
 
     MODE: str = "conv"
-    KERNEL_SIZE: int = Field(default=3, gt=0)
-    DILATION: int = Field(default=1, gt=0)
-    OUT_CHANNEL: int = Field(default=80, gt=0)
+    KERNEL_SIZE: PositiveInt | tuple[PositiveInt, PositiveInt] = 3
+    DILATION: PositiveInt = 1
+    OUT_CHANNEL: PositiveInt = 80
+    PADDING_MODE: str = "circular"
     # attention / mh_attention
-    NUM_HEADS: int = Field(default=4, gt=0)
-    EMBED_DIM: int = Field(default=128, gt=0)
+    NUM_HEADS: PositiveInt = 4
+    EMBED_DIM: PositiveInt = 128
     USE_REL_POS_BIAS: bool = True
     # mh_attention only
     USE_LAYER_NORM: bool = True
@@ -62,7 +77,22 @@ class PerceptionConfig(StrictModel):
                 raise ValueError("Attention KERNEL_SIZE must be odd.")
             dimension = self.OUT_CHANNEL if self.MODE == "attention" else self.EMBED_DIM
             if dimension % self.NUM_HEADS:
-                raise ValueError("Attention projection dimension must be divisible by NUM_HEADS.")
+                raise ValueError(
+                    "Attention projection dimension must be divisible by NUM_HEADS."
+                )
+        return self
+
+    @model_validator(mode="after")
+    def check_attention_kernel_size(self):
+        # Attention perceptions tile the neighbourhood in both dimensions and
+        # therefore require a square, odd kernel.
+        if self.MODE not in ("conv", "residual_conv") and isinstance(
+            self.KERNEL_SIZE, tuple
+        ):
+            raise ValueError(
+                f"MODE '{self.MODE}' requires a square KERNEL_SIZE, "
+                f"got {list(self.KERNEL_SIZE)}."
+            )
         return self
 
 
@@ -93,11 +123,12 @@ class ModelConfig(StrictModel):
         RESNET_BLOCKS: Number of residual blocks (``ResNet`` only).
         PERCEPTIONS: List of perception branch configs; outputs are concatenated.
     """
+
     ARCHITECTURE: str = "residual"
     NAME: str = "MLP"
-    HIDDEN_CHANNELS: list[Annotated[int, Field(gt=0)]] = Field(default_factory=lambda: [64])
-    CHANNEL_N: int = Field(default=16, gt=0)
-    CHANNEL_OUT: int | None = Field(default=None, gt=0)
+    HIDDEN_CHANNELS: list[PositiveInt] = Field(default_factory=lambda: [64])
+    CHANNEL_N: PositiveInt = 16
+    CHANNEL_OUT: PositiveInt | None = Field(default=None, gt=0)
     _channel_out_auto: bool = PrivateAttr(default=False)
     USE_POSITIONAL_EMBEDDINGS: bool = False
     LIVING_MASK: bool = False
@@ -119,8 +150,11 @@ class ModelConfig(StrictModel):
     @classmethod
     def check_architecture(cls, value):
         from nca.core.models.model_factory import MODEL_REGISTRY
+
         if value not in MODEL_REGISTRY:
-            raise ValueError(f"MODEL.ARCHITECTURE must be one of {sorted(MODEL_REGISTRY)}.")
+            raise ValueError(
+                f"MODEL.ARCHITECTURE must be one of {sorted(MODEL_REGISTRY)}."
+            )
         return value
 
     @field_validator("NAME")
@@ -202,7 +236,9 @@ class TrainingConfig(StrictModel):
     LEARNING_RATE: float = Field(default=0.002, gt=0, le=1)
     WARMUP_STEPS: int = Field(default=2000, ge=0)
     LR_SCHEDULE_MODE: Literal["step", "cosine", "constant", "wsd"] = "step"
-    MILESTONES: list[Annotated[int, Field(ge=0)]] = Field(default_factory=lambda: [2000, 8000])
+    MILESTONES: list[Annotated[int, Field(ge=0)]] = Field(
+        default_factory=lambda: [2000, 8000]
+    )
     LR_GAMMA: float = Field(default=0.1, ge=0)
     OPTIMIZER_BETAS: list[Annotated[float, Field(ge=0, lt=1)]] = Field(
         default_factory=lambda: [0.9, 0.999], min_length=2, max_length=2
@@ -258,8 +294,13 @@ class TrainingConfig(StrictModel):
     def check_rollout_lengths(self):
         if self.ITER_N_MIN > self.ITER_N_MAX:
             raise ValueError("ITER_N_MIN cannot be greater than ITER_N_MAX")
-        if self.GRADIENT_CHECKPOINTING and self.GRADIENT_CHECKPOINT_SEGMENTS > self.ITER_N_MIN:
-            raise ValueError("GRADIENT_CHECKPOINT_SEGMENTS cannot exceed ITER_N_MIN when checkpointing is enabled.")
+        if (
+            self.GRADIENT_CHECKPOINTING
+            and self.GRADIENT_CHECKPOINT_SEGMENTS > self.ITER_N_MIN
+        ):
+            raise ValueError(
+                "GRADIENT_CHECKPOINT_SEGMENTS cannot exceed ITER_N_MIN when checkpointing is enabled."
+            )
         return self
 
     @model_validator(mode="after")
@@ -267,7 +308,9 @@ class TrainingConfig(StrictModel):
         if self.LR_SCHEDULE_MODE == "wsd":
             decay_steps = int(self.STEPS * self.WSD_DECAY_RATIO)
             if self.WARMUP_STEPS + decay_steps > self.STEPS:
-                raise ValueError("WSD warmup and decay phases cannot exceed TRAINING.STEPS.")
+                raise ValueError(
+                    "WSD warmup and decay phases cannot exceed TRAINING.STEPS."
+                )
         return self
 
 
@@ -403,8 +446,13 @@ class LatentConfig(StrictModel):
                     "to keep AE decoder channels positive."
                 )
         elif self.ENCODER_TYPE in {"VAE", "VQVAE"}:
-            if self.VAE_NUM_DOWNSAMPLES > 0 and self.VAE_BASE_CHANNELS % self.VAE_NORM_GROUPS:
-                raise ValueError("VAE_BASE_CHANNELS must be divisible by VAE_NORM_GROUPS.")
+            if (
+                self.VAE_NUM_DOWNSAMPLES > 0
+                and self.VAE_BASE_CHANNELS % self.VAE_NORM_GROUPS
+            ):
+                raise ValueError(
+                    "VAE_BASE_CHANNELS must be divisible by VAE_NORM_GROUPS."
+                )
         return self
 
     def get_latent_shape(self, height: int, width: int) -> tuple[int, int]:
@@ -414,7 +462,7 @@ class LatentConfig(StrictModel):
             if self.ENCODER_TYPE == "AE"
             else self.VAE_NUM_DOWNSAMPLES
         )
-        factor = 2 ** stages
+        factor = 2**stages
         if height < factor or width < factor or height % factor or width % factor:
             raise ValueError(
                 f"{self.ENCODER_TYPE} image height and width must be positive multiples of {factor}; "
