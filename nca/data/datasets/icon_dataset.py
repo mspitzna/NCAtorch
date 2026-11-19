@@ -128,7 +128,7 @@ def make_seed(size, channel_n):
 def load_emoji(emoji, target_size=128):
     codepoints = "_".join(hex(ord(char))[2:] for char in emoji)
     url = (
-        "https://raw.githubusercontent.com/googlefonts/noto-emoji/main/png/512/emoji_u%s.png"
+        "https://raw.githubusercontent.com/googlefonts/noto-emoji/main/2D/png/512/emoji_u%s.png"
         % codepoints
     )
     return load_image(url, target_size)

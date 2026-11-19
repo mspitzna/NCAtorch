@@ -26,7 +26,8 @@ def parse_args():
         help="Number of times to retry training if `trainer.train()` returns -1.",
     )
     parser.add_argument(
-        "--device", type=str, default="cuda", help="Device to use for training"
+        "--device", type=str, default=None,
+        help="Override DEVICE from the config (otherwise use the configured device)",
     )
     parser.add_argument(
         "--folder",
@@ -51,14 +52,22 @@ def parse_args():
 
 
 def _set_by_path(cfg_dict, key_path, value):
-    """Set nested value in a dict using dot-delimited keys."""
+    """Set a config value using dot-delimited keys and numeric list indices."""
     keys = key_path.split(".")
     d = cfg_dict
-    for k in keys[:-1]:
-        if k not in d or not isinstance(d[k], dict):
-            d[k] = {}
-        d = d[k]
-    d[keys[-1]] = value
+    for index, key in enumerate(keys):
+        if isinstance(d, list):
+            if not key.isdigit() or int(key) >= len(d):
+                raise ValueError(f"Invalid list index in override '{key_path}'.")
+            key = int(key)
+        elif not isinstance(d, dict):
+            raise ValueError(f"Cannot traverse override '{key_path}'.")
+        if index == len(keys) - 1:
+            d[key] = value
+        else:
+            if isinstance(d, dict) and key not in d:
+                d[key] = {}
+            d = d[key]
 
 
 def _flatten_dict(d, parent_key=""):
@@ -77,21 +86,13 @@ def apply_overrides(config, overrides: dict):
     """Return a new Config with overrides applied (validated by pydantic)."""
     if not overrides:
         return config
-    # Drop None fields to avoid re-validating optional paths as Path(None)
-    cfg_dict = config.model_dump(exclude_none=True)
-    # Only allow overrides that exist in the current config structure to avoid pydantic errors
-    existing_paths = set(_flatten_dict(cfg_dict).keys())
-    filtered = {}
-    for k, v in overrides.items():
-        if k in existing_paths:
-            filtered[k] = v
-        else:
-            print(f"[override] Skipping unknown key '{k}' (not in config).")
-    overrides = filtered
-    if not overrides:
-        return config
+    cfg_dict = config.model_dump()
+    # Recompute derived defaults after overrides; explicit values remain explicit.
+    if config.MODEL.channel_out_is_auto:
+        cfg_dict["MODEL"]["CHANNEL_OUT"] = None
     for key, value in overrides.items():
         _set_by_path(cfg_dict, key, value)
+    # The schema rejects unknown paths and invalid values, including nullable fields.
     return config.__class__(**cfg_dict)
 
 
@@ -152,9 +153,9 @@ def main():
     cli_overrides = parse_override_strings(args.override)
     config = apply_overrides(config, cli_overrides)
 
-    # if device is set per args, update config
-    if args.device:
-        config = config.model_copy(update={"DEVICE": args.device})
+    # Only an explicit --device overrides the configured device.
+    if args.device is not None:
+        config = apply_overrides(config, {"DEVICE": args.device})
 
     # If running a wandb sweep, init wandb early and apply sweep overrides
     use_sweep = args.sweep or os.environ.get("WANDB_SWEEP") == "1"

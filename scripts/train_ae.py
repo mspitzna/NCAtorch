@@ -121,9 +121,15 @@ def main():
 
     # Prepare dataset
     dataloader, _, h, w = create_dataset(config)
+    config.LATENT_TRAINING.get_latent_shape(h, w)
     print(f"Input H: {h}, W: {w}")
 
     model, reconstruction_criterion, vae_kl_beta = create_latent_encoder(config, device)
+
+    if config.LATENT_TRAINING.AE_CHECKPOINT is not None:
+        model.load_state_dict(torch.load(
+            config.LATENT_TRAINING.AE_CHECKPOINT, map_location=device, weights_only=True
+        ))
 
 
     optimizer = optim.AdamW(model.parameters(), lr=config.LATENT_TRAINING.LATENT_AE_LR, weight_decay=1e-5)
@@ -306,8 +312,7 @@ def main():
     #if use_wandb:
     #    wandb.save(os.path.join(model_output_folder, final_model_name))
 
-    # Changed FOLDER_NAME to suggest model path for clarity
-    print(f"\nConsider adding to your config: LATENT_MODEL_PATH: {os.path.join(model_output_folder, final_model_name)}")
+    print(f"\nSet LATENT_TRAINING.AE_CHECKPOINT to: {os.path.join(model_output_folder, final_model_name)}")
 
     # Finish wandb run
     if use_wandb:

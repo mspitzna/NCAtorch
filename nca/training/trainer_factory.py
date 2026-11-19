@@ -32,6 +32,10 @@ _DATASET_REQUIRED_TRAINER = {
 }
 
 
+from nca.extensions.spatial_reasoning.registration import register_trainers as register_spatial_reasoning_trainers
+register_spatial_reasoning_trainers(TRAINER_REGISTRY, _DATASET_REQUIRED_TRAINER)
+
+
 def create_trainer(config: Config, model, dataloader, config_path: str):
     """Instantiate the correct trainer for the given config.
 
@@ -84,14 +88,14 @@ def create_trainer(config: Config, model, dataloader, config_path: str):
                 f"but got '{trainer_key}'. Either change the dataset or the trainer."
             )
 
-    loss_fn = create_loss_fn(config)
     use_latent = config.LATENT_TRAINING.ENABLED
     trainer_cls = TRAINER_REGISTRY[trainer_key]
 
     print(f"Trainer: {trainer_key}")
 
-    # AdversarialTrainer manages its own loss internally
-    if trainer_key == "adversarial":
+    # Trainers with their own objectives must not construct an unused host loss.
+    if not trainer_cls.USES_FRAMEWORK_LOSS:
         return trainer_cls(model, dataloader, config, config_path, use_latent=use_latent)
 
+    loss_fn = create_loss_fn(config)
     return trainer_cls(model, dataloader, config, config_path, loss_fn=loss_fn, use_latent=use_latent)

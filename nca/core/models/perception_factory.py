@@ -68,6 +68,9 @@ PERCEPTION_REGISTRY = {
     ),
 }
 
+from nca.extensions.spatial_reasoning.registration import register_perceptions as register_spatial_reasoning_perceptions
+register_spatial_reasoning_perceptions(PERCEPTION_REGISTRY)
+
 
 def create_perception_module(config: Config, cond_dim: int, device: str):
     channel_n = (

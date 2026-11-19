@@ -1,7 +1,5 @@
-import os
-import torch
 import torch.nn as nn
-from nca.core.models.latent_encoder_factory import create_latent_encoder, get_checkpoint_filename
+from nca.core.models.latent_encoder_factory import load_latent_encoder
 from nca.utils.config import Config
 
 
@@ -27,32 +25,15 @@ class LatentWrapper(nn.Module):
         self.encoder_decoder = self._load_encoder_decoder()
         
     def _load_encoder_decoder(self):
-        """Load encoder/decoder from checkpoint"""
-        
-        ae, reconstruction_criterion, vae_kl_beta = create_latent_encoder(self.config, self.device)
-
-        # Load AE weights
-        folder_name = self.config.LOGGING.FOLDER_NAME
-        if folder_name != "??testing":
-            ae_checkpoint = self.config.LATENT_TRAINING.AE_CHECKPOINT
-            checkpoint_file = get_checkpoint_filename(self.config.LATENT_TRAINING.ENCODER_TYPE)
-            default_ae_path = os.path.join(folder_name, "ae_checkpoints", checkpoint_file)
-            assert os.path.exists(default_ae_path) or (ae_checkpoint is not None), "AutoEncoder weights not found"
-
-            if ae_checkpoint is not None:
-                ae.load_state_dict(torch.load(ae_checkpoint, weights_only=True, map_location=self.device))
-            else:
-                ae.load_state_dict(torch.load(default_ae_path, weights_only=True, map_location=self.device))
-                print(f"Loaded AutoEncoder weights from {default_ae_path}")
-
-        ae.eval()
-        ae.to(self.device)
-        return ae# , reconstruction_criterion, vae_kl_beta
+        """Load frozen weights without constructing an encoder training loss."""
+        return load_latent_encoder(self.config, self.device)
     
         
     def encode(self, x):
         """Encode from pixel to latent space"""
-        result = self.encoder_decoder.encode(x)
+        result = self.encoder_decoder.encode(
+            x[:, :self.config.LATENT_TRAINING.LATENT_AE_IN_CHANNEL]
+        )
         # AE.encode() returns a plain tensor
         # VAE.encode() returns (mu, logvar) — use mu for deterministic encoding
         return result[0] if isinstance(result, tuple) else result
@@ -67,8 +48,7 @@ class LatentWrapper(nn.Module):
 
     def evolve_in_latent_space(self, x, cond=None, freeze_channels=None, step_size=1.0):
         """Encode, evolve in latent space, then decode. Returns ``(state, dx)``."""
-        print(f"Input shape: {x.shape}, cond shape: {cond.shape if cond is not None else 'None'}")
-        latent_x = self.encode(x[:, :self.config.LATENT_TRAINING.LATENT_AE_IN_CHANNEL])
+        latent_x = self.encode(x)
         evolved_latent, residuals = self.base_model(
             x=latent_x, cond=cond, step_size=step_size, freeze_channels=freeze_channels
         )
